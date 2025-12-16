@@ -6,11 +6,11 @@ public class MenuCameraFollow : MonoBehaviour
     [SerializeField] private Transform cameraPivot;
 
     [Header("Movement Points")]
-    [SerializeField] private Vector3 rightOffset = new Vector3(15f, 0f, 20f);
-    [SerializeField] private Vector3 leftOffset = new Vector3(15f, 0f, -20f);
+    [SerializeField] private Vector3 rightOffset = new Vector3(-40f, 0f, 30f);
+    [SerializeField] private Vector3 leftOffset = new Vector3(-40f, 0f, -30f);
 
     [Header("Movement Settings")]
-    [SerializeField] private float moveSpeed = 2f;
+    [SerializeField] private float moveSpeed = 4f;
     [SerializeField] private float waitTimeAtPoint = 0.5f;
 
     [Header("Rotation")]
@@ -22,15 +22,12 @@ public class MenuCameraFollow : MonoBehaviour
     private float waitTimer = 0f;
     private bool isWaiting = false;
 
-    // Puntos del recorrido: centro -> derecha -> centro -> izquierda -> (repite)
     private Vector3[] pathPoints;
 
     private void Start()
     {
-        // Guardar la posición inicial desde Unity
         startPosition = transform.position;
 
-        // Definir los puntos del recorrido
         pathPoints = new Vector3[]
         {
             startPosition,                          // 0: Centro (inicio)
@@ -39,18 +36,15 @@ public class MenuCameraFollow : MonoBehaviour
             startPosition + leftOffset,             // 3: Izquierda
         };
 
-        // Empezar en el punto inicial
         currentPointIndex = 0;
         targetPosition = pathPoints[0];
 
-        // Pequeña espera inicial antes de empezar el movimiento
         isWaiting = true;
         waitTimer = waitTimeAtPoint;
     }
 
     private void LateUpdate()
     {
-        // Manejar tiempo de espera en cada punto
         if (isWaiting)
         {
             waitTimer -= Time.deltaTime;
@@ -62,14 +56,12 @@ public class MenuCameraFollow : MonoBehaviour
         }
         else
         {
-            // Mover la cámara hacia el punto objetivo
             transform.position = Vector3.MoveTowards(
                 transform.position,
                 targetPosition,
                 moveSpeed * Time.deltaTime
             );
 
-            // Comprobar si hemos llegado al punto objetivo
             if (Vector3.Distance(transform.position, targetPosition) < 0.01f)
             {
                 transform.position = targetPosition;
@@ -78,7 +70,6 @@ public class MenuCameraFollow : MonoBehaviour
             }
         }
 
-        // Rotar la cámara para mirar siempre al pivot
         if (cameraPivot != null)
         {
             Vector3 direction = cameraPivot.position - transform.position;
@@ -96,13 +87,11 @@ public class MenuCameraFollow : MonoBehaviour
 
     private void MoveToNextPoint()
     {
-        // Avanzar al siguiente punto en el recorrido
         currentPointIndex++;
 
-        // Si llegamos al final, volver al principio (después del punto 0 inicial)
         if (currentPointIndex >= pathPoints.Length)
         {
-            currentPointIndex = 1; // Volver al punto 1 (derecha) para continuar el ciclo
+            currentPointIndex = 1;
         }
 
         targetPosition = pathPoints[currentPointIndex];
