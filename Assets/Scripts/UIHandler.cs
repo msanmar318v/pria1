@@ -7,7 +7,7 @@ public class UIHandler : MonoBehaviour
     void Start()
     {
         if (panels == null || panels.Length == 0) return;
-        ocultarPaneles();
+        //ocultarPaneles();
     }
 
     public void ocultarPaneles()
