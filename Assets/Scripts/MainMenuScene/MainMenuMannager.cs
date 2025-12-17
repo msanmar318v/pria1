@@ -4,7 +4,7 @@ using System.Collections;
 
 public class MainMenuManager : MonoBehaviour
 {
-    [SerializeField] private float sceneTransitionDelay = 0.5f;
+    [SerializeField] private float sceneTransitionDelay = 0.45f;
 
     public void StartGame()
     {

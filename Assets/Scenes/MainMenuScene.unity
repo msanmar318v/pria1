@@ -1300,7 +1300,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bfe5b93be9333f044a6bf7a9deb57924, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sceneTransitionDelay: 0.5
+  sceneTransitionDelay: 0.45
 --- !u!1 &1066140099
 GameObject:
   m_ObjectHideFlags: 0
