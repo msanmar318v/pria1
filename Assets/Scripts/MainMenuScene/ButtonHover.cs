@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using System.Collections;
 
 public class ButtonHover : MonoBehaviour,
     IPointerEnterHandler,
@@ -8,9 +9,10 @@ public class ButtonHover : MonoBehaviour,
     ISelectHandler,
     IDeselectHandler
 {
-    [Header("Symbols")]
+    [Header("HoverItems")]
     [SerializeField] private RectTransform leftSymbol;
     [SerializeField] private RectTransform rightSymbol;
+    [SerializeField] private RectTransform backgroundPlankImage;
 
     [Header("Text")]
     [SerializeField] private RectTransform buttonText;
@@ -20,20 +22,33 @@ public class ButtonHover : MonoBehaviour,
     [SerializeField] private float fadeSpeed = 15f;
     [SerializeField] private float moveDistance = 8f;
     [SerializeField] private float scaleSpeed = 10f;
+    [SerializeField] private float plankDropDistance = 10f;
+    [SerializeField] private float plankDropSpeed = 15f;
 
     [Header("Audio")]
     [SerializeField] private AudioSource hoverSound;
+    [SerializeField] private AudioSource clickSound;
+
+    [Header("Click Settings")]
+    [SerializeField] private Sprite clickSprite;
+    [SerializeField] private float delayBeforeAction = 0.5f;
 
     private CanvasGroup leftCanvas;
     private CanvasGroup rightCanvas;
+    private CanvasGroup backgroundPlankImageCanvas;
+    private Image backgroundPlankImageComponent;
+    private Sprite originalSprite;
 
     private Vector2 leftStartPos;
     private Vector2 rightStartPos;
+    private Vector2 plankCenterPos;
+    private Vector2 plankHiddenPos;
     private Vector3 textStartScale;
 
     private float targetAlpha = 0f;
     private float targetTextScale = 1f;
     private bool isHovered = false;
+    private bool isProcessingClick = false;
 
     private Button button;
 
@@ -41,24 +56,51 @@ public class ButtonHover : MonoBehaviour,
     {
         leftCanvas = leftSymbol.GetComponent<CanvasGroup>();
         rightCanvas = rightSymbol.GetComponent<CanvasGroup>();
+        backgroundPlankImageCanvas = backgroundPlankImage.GetComponent<CanvasGroup>();
+        backgroundPlankImageComponent = backgroundPlankImage.GetComponent<Image>();
+
+        if (backgroundPlankImageComponent != null)
+        {
+            originalSprite = backgroundPlankImageComponent.sprite;
+        }
 
         leftStartPos = leftSymbol.anchoredPosition;
         rightStartPos = rightSymbol.anchoredPosition;
+        plankCenterPos = backgroundPlankImage.anchoredPosition;
+        plankHiddenPos = plankCenterPos + Vector2.up * plankDropDistance;
+
         textStartScale = buttonText.localScale;
 
         leftCanvas.alpha = 0f;
         rightCanvas.alpha = 0f;
+        backgroundPlankImageCanvas.alpha = 0f;
+
+        backgroundPlankImage.anchoredPosition = plankHiddenPos;
 
         button = GetComponent<Button>();
+
+        if (button != null)
+        {
+            button.onClick.AddListener(OnButtonClick);
+        }
     }
 
     private void Update()
     {
-        // Fade
+        if (isProcessingClick) return;
+
         leftCanvas.alpha = Mathf.Lerp(leftCanvas.alpha, targetAlpha, Time.deltaTime * fadeSpeed);
         rightCanvas.alpha = Mathf.Lerp(rightCanvas.alpha, targetAlpha, Time.deltaTime * fadeSpeed);
 
-        // Move
+        if (isHovered)
+        {
+            backgroundPlankImageCanvas.alpha = Mathf.Lerp(backgroundPlankImageCanvas.alpha, targetAlpha, Time.deltaTime * plankDropSpeed);
+        }
+        else
+        {
+            backgroundPlankImageCanvas.alpha = 0f;
+        }
+
         leftSymbol.anchoredPosition = Vector2.Lerp(
             leftSymbol.anchoredPosition,
             leftStartPos + Vector2.left * (1 - targetAlpha) * moveDistance,
@@ -71,12 +113,49 @@ public class ButtonHover : MonoBehaviour,
             Time.deltaTime * fadeSpeed
         );
 
-        // Scale text
+        Vector2 targetPlankPos = isHovered ? plankCenterPos : plankHiddenPos;
+        backgroundPlankImage.anchoredPosition = Vector2.Lerp(
+            backgroundPlankImage.anchoredPosition,
+            targetPlankPos,
+            Time.deltaTime * plankDropSpeed
+        );
+
         buttonText.localScale = Vector3.Lerp(
             buttonText.localScale,
             textStartScale * targetTextScale,
             Time.deltaTime * scaleSpeed
         );
+    }
+
+    private void OnButtonClick()
+    {
+        if (isProcessingClick) return;
+
+        StartCoroutine(HandleClickSequence());
+    }
+
+    private IEnumerator HandleClickSequence()
+    {
+        isProcessingClick = true;
+
+        if (clickSprite != null && backgroundPlankImageComponent != null)
+        {
+            backgroundPlankImageComponent.sprite = clickSprite;
+        }
+
+        if (clickSound != null)
+        {
+            clickSound.Play();
+        }
+
+        yield return new WaitForSeconds(delayBeforeAction);
+
+        if (originalSprite != null && backgroundPlankImageComponent != null)
+        {
+            backgroundPlankImageComponent.sprite = originalSprite;
+        }
+
+        isProcessingClick = false;
     }
 
     // Mouse
@@ -108,7 +187,7 @@ public class ButtonHover : MonoBehaviour,
 
     private void ActivateHover()
     {
-        if (isHovered) return;
+        if (isHovered || isProcessingClick) return;
 
         isHovered = true;
         targetAlpha = 1f;
@@ -120,6 +199,8 @@ public class ButtonHover : MonoBehaviour,
 
     private void DeactivateHover()
     {
+        if (isProcessingClick) return;
+
         isHovered = false;
         targetAlpha = 0f;
         targetTextScale = 1f;
