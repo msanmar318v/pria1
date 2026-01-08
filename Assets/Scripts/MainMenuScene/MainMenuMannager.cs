@@ -8,7 +8,7 @@ public class MainMenuManager : MonoBehaviour
 
     public void StartGame()
     {
-        StartCoroutine(LoadSceneWithDelay("SampleScene"));
+        StartCoroutine(LoadSceneWithDelay("PlayScene"));
     }
 
     public void QuitGame()
