@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 0d42e7b82bba40f1a16a6cc3a4ddd262
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - RunnerPrefab: {fileID: 2382109156329011261, guid: 7189b7c33d080ae4e8cf346d625c78f9, type: 3}
+  - PanelGroup: {instanceID: 0}
+  - RoomText: {instanceID: 0}
+  - NicknameText: {instanceID: 0}
+  - StatusText: {instanceID: 0}
+  - StartGroup: {instanceID: 0}
+  - DisconnectGroup: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
