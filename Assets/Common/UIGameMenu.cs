@@ -8,21 +8,21 @@ using UnityEngine.SceneManagement;
 namespace Starter
 {
 	/// <summary>
-	/// Shows in-game menu, handles player connecting/disconnecting to the network game and cursor locking.
+	/// Muestra el menú del juego, maneja la conexión/desconexión del jugador a la partida de red y el bloqueo del cursor.
 	/// </summary>
 	public class UIGameMenu : MonoBehaviour
 	{
-		[Header("Start Game Setup")]
-		[Tooltip("Specifies which game mode player should join - e.g. Platformer, ThirdPersonCharacter")]
+		[Header("Configuración de Inicio")]
+		[Tooltip("Especifica a qué modo de juego debe unirse el jugador - ej. Platformer, ThirdPersonCharacter")]
 		public string GameModeIdentifier;
 		public NetworkRunner RunnerPrefab;
 		public int MaxPlayerCount = 8;
 
-		[Header("Debug")]
-		[Tooltip("For debug purposes it is possible to force single-player game (starts faster)")]
+		[Header("Depuración")]
+		[Tooltip("Para propósitos de depuración es posible forzar un juego individual (inicia más rápido)")]
 		public bool ForceSinglePlayer;
 
-		[Header("UI Setup")]
+		[Header("Configuración de UI")]
 		public CanvasGroup PanelGroup;
 		public TMP_InputField RoomText;
 		public TMP_InputField NicknameText;
@@ -41,7 +41,7 @@ namespace Starter
 
 			_runnerInstance = Instantiate(RunnerPrefab);
 
-			// Add listener for shutdowns so we can handle unexpected shutdowns
+			// Añade un listener para desconexiones para poder manejar desconexiones inesperadas
 			var events = _runnerInstance.GetComponent<NetworkEvents>();
 			events.OnShutdown.AddListener(OnShutdown);
 
@@ -53,13 +53,13 @@ namespace Starter
 				GameMode = Application.isEditor && ForceSinglePlayer ? GameMode.Single : GameMode.AutoHostOrClient,
 				SessionName = RoomText.text,
 				PlayerCount = MaxPlayerCount,
-				// We need to specify a session property for matchmaking to decide where the player wants to join.
-				// Otherwise players from Platformer scene could connect to ThirdPersonCharacter game etc.
+				// Necesitamos especificar una propiedad de sesión para que el matchmaking decida dónde quiere unirse el jugador.
+				// De lo contrario, jugadores de la escena Platformer podrían conectarse al juego ThirdPersonCharacter, etc.
 				SessionProperties = new Dictionary<string, SessionProperty> {["GameMode"] = GameModeIdentifier},
 				Scene = sceneInfo,
 			};
 
-			StatusText.text = startArguments.GameMode == GameMode.Single ? "Starting single-player..." : "Connecting...";
+			StatusText.text = startArguments.GameMode == GameMode.Single ? "Iniciando partida individual..." : "Conectando...";
 
 			var startTask = _runnerInstance.StartGame(startArguments);
 			await startTask;
@@ -71,7 +71,7 @@ namespace Starter
 			}
 			else
 			{
-				StatusText.text = $"Connection Failed: {startTask.Result.ShutdownReason}";
+				StatusText.text = $"Error de conexión: {startTask.Result.ShutdownReason}";
 			}
 		}
 
@@ -90,7 +90,7 @@ namespace Starter
 		public void TogglePanelVisibility()
 		{
 			if (PanelGroup.gameObject.activeSelf && _runnerInstance == null)
-				return; // Panel cannot be hidden if the game is not running
+				return; // El panel no puede ocultarse si el juego no está en ejecución
 
 			PanelGroup.gameObject.SetActive(!PanelGroup.gameObject.activeSelf);
 		}
@@ -102,19 +102,19 @@ namespace Starter
 			var nickname = PlayerPrefs.GetString("PlayerName");
 			if (string.IsNullOrEmpty(nickname))
 			{
-				nickname = "Player" + Random.Range(10000, 100000);
+				nickname = "Jugador" + Random.Range(10000, 100000);
 			}
 
 			NicknameText.text = nickname;
 
-			// Try to load previous shutdown status
+			// Intenta cargar el estado de desconexión previo
 			StatusText.text = _shutdownStatus != null ? _shutdownStatus : string.Empty;
 			_shutdownStatus = null;
 		}
 
 		private void Update()
 		{
-			// Enter/Esc key is used for locking/unlocking cursor in game view.
+			// Las teclas Enter/Esc se usan para bloquear/desbloquear el cursor en la vista del juego.
 			if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Escape))
 			{
 				TogglePanelVisibility();
@@ -142,29 +142,29 @@ namespace Starter
 			if (_runnerInstance == null)
 				return;
 
-			StatusText.text = "Disconnecting...";
+			StatusText.text = "Desconectando...";
 			PanelGroup.interactable = false;
 
-			// Remove shutdown listener since we are disconnecting deliberately
+			// Elimina el listener de desconexión ya que nos estamos desconectando deliberadamente
 			var events = _runnerInstance.GetComponent<NetworkEvents>();
 			events.OnShutdown.RemoveListener(OnShutdown);
 
 			await _runnerInstance.Shutdown();
 			_runnerInstance = null;
 
-			// Reset of scene network objects is needed, reload the whole scene
+			// Es necesario restablecer los objetos de red de la escena, recarga toda la escena
 			SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
 		}
 
 		private void OnShutdown(NetworkRunner runner, ShutdownReason reason)
 		{
-			// Unexpected shutdown happened (e.g. Host disconnected)
+			// Ocurrió una desconexión inesperada (ej. el host se desconectó)
 
-			// Save status into static variable, it will be used in OnEnable after scene load
-			_shutdownStatus = $"Shutdown: {reason}";
+			// Guarda el estado en una variable estática, se usará en OnEnable después de cargar la escena
+			_shutdownStatus = $"Desconexión: {reason}";
 			Debug.LogWarning(_shutdownStatus);
 
-			// Reset of scene network objects is needed, reload the whole scene
+			// Es necesario restablecer los objetos de red de la escena, recarga toda la escena
 			SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
 		}
 	}

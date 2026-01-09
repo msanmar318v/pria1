@@ -42,6 +42,7 @@ public class PlaySceneUIMannager : MonoBehaviour
     public float hoverAnimationDuration = 0.1f;
 
     private Dictionary<RectTransform, Coroutine> activeAnimations = new Dictionary<RectTransform, Coroutine>();
+    private Dictionary<RectTransform, bool> isHovering = new Dictionary<RectTransform, bool>();
 
     private void Start()
     {
@@ -58,14 +59,10 @@ public class PlaySceneUIMannager : MonoBehaviour
     {
         GameObject buttonObject = settings.button.gameObject;
         
-        EventTrigger trigger = buttonObject.GetComponent<EventTrigger>();
-        if (trigger == null)
-        {
-            trigger = buttonObject.AddComponent<EventTrigger>();
-        }
-
         RectTransform rectTransform = buttonObject.GetComponent<RectTransform>();
         Vector2 originalPosition = rectTransform.anchoredPosition;
+        
+        isHovering[rectTransform] = false;
         
         float moveDistance = settings.customMoveDistance > 0 ? settings.customMoveDistance : defaultHoverMoveDistance;
         float directionMultiplier = settings.direction == HoverDirection.Left ? -1f : 1f;
@@ -81,44 +78,57 @@ public class PlaySceneUIMannager : MonoBehaviour
         extensionRect.offsetMax = Vector2.zero;
         extensionRect.anchoredPosition = Vector2.zero;
         
+        hoverExtension.transform.SetAsFirstSibling();
+        
         Image invisibleImage = hoverExtension.AddComponent<Image>();
         invisibleImage.color = new Color(0, 0, 0, 0);
         invisibleImage.raycastTarget = true;
         
         settings.hoverExtension = extensionRect;
         
-        EventTrigger extensionTrigger = hoverExtension.AddComponent<EventTrigger>();
-
-        EventTrigger.Entry entryEnter = new EventTrigger.Entry
+        EventTrigger buttonTrigger = buttonObject.GetComponent<EventTrigger>();
+        if (buttonTrigger == null)
         {
-            eventID = EventTriggerType.PointerEnter
-        };
-        entryEnter.callback.AddListener((data) => { 
-            OnHoverEnter(rectTransform, extensionRect, originalPosition, moveDistance * directionMultiplier); 
-        });
-        extensionTrigger.triggers.Add(entryEnter);
+            buttonTrigger = buttonObject.AddComponent<EventTrigger>();
+        }
 
-        EventTrigger.Entry entryExit = new EventTrigger.Entry
-        {
-            eventID = EventTriggerType.PointerExit
-        };
-        entryExit.callback.AddListener((data) => { 
-            OnHoverExit(rectTransform, extensionRect, originalPosition); 
-        });
-        extensionTrigger.triggers.Add(entryExit);
-
-        EventTrigger.Entry buttonEnter = new EventTrigger.Entry
-        {
-            eventID = EventTriggerType.PointerEnter
-        };
+        EventTrigger.Entry buttonEnter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
         buttonEnter.callback.AddListener((data) => { 
             OnHoverEnter(rectTransform, extensionRect, originalPosition, moveDistance * directionMultiplier); 
         });
-        trigger.triggers.Add(buttonEnter);
+        buttonTrigger.triggers.Add(buttonEnter);
+
+        EventTrigger.Entry buttonExit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+        buttonExit.callback.AddListener((data) => { 
+            OnHoverExit(rectTransform, extensionRect, originalPosition); 
+        });
+        buttonTrigger.triggers.Add(buttonExit);
+
+        EventTrigger extensionTrigger = hoverExtension.AddComponent<EventTrigger>();
+
+        EventTrigger.Entry extensionEnter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+        extensionEnter.callback.AddListener((data) => { 
+            OnHoverEnter(rectTransform, extensionRect, originalPosition, moveDistance * directionMultiplier); 
+        });
+        extensionTrigger.triggers.Add(extensionEnter);
+
+        EventTrigger.Entry extensionExit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+        extensionExit.callback.AddListener((data) => { 
+            OnHoverExit(rectTransform, extensionRect, originalPosition); 
+        });
+        extensionTrigger.triggers.Add(extensionExit);
+
+        EventTrigger.Entry extensionClick = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+        extensionClick.callback.AddListener((data) => {
+            settings.button.onClick.Invoke();
+        });
+        extensionTrigger.triggers.Add(extensionClick);
     }
 
     private void OnHoverEnter(RectTransform rectTransform, RectTransform extensionRect, Vector2 originalPosition, float moveDistance)
     {
+        isHovering[rectTransform] = true;
+        
         if (activeAnimations.ContainsKey(rectTransform) && activeAnimations[rectTransform] != null)
         {
             StopCoroutine(activeAnimations[rectTransform]);
@@ -135,15 +145,27 @@ public class PlaySceneUIMannager : MonoBehaviour
 
     private void OnHoverExit(RectTransform rectTransform, RectTransform extensionRect, Vector2 originalPosition)
     {
-        if (activeAnimations.ContainsKey(rectTransform) && activeAnimations[rectTransform] != null)
+        isHovering[rectTransform] = false;
+        
+        StartCoroutine(DelayedHoverExit(rectTransform, extensionRect, originalPosition));
+    }
+
+    private IEnumerator DelayedHoverExit(RectTransform rectTransform, RectTransform extensionRect, Vector2 originalPosition)
+    {
+        yield return null;
+        
+        if (!isHovering[rectTransform])
         {
-            StopCoroutine(activeAnimations[rectTransform]);
+            if (activeAnimations.ContainsKey(rectTransform) && activeAnimations[rectTransform] != null)
+            {
+                StopCoroutine(activeAnimations[rectTransform]);
+            }
+            
+            extensionRect.offsetMin = Vector2.zero;
+            extensionRect.offsetMax = Vector2.zero;
+            
+            activeAnimations[rectTransform] = StartCoroutine(AnimatePosition(rectTransform, originalPosition));
         }
-        
-        extensionRect.offsetMin = Vector2.zero;
-        extensionRect.offsetMax = Vector2.zero;
-        
-        activeAnimations[rectTransform] = StartCoroutine(AnimatePosition(rectTransform, originalPosition));
     }
 
     private IEnumerator AnimatePosition(RectTransform rectTransform, Vector2 targetPosition)
