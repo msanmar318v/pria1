@@ -227,6 +227,7 @@ GameObject:
   - component: {fileID: 8261807108443789817}
   - component: {fileID: 6744880684058088246}
   - component: {fileID: 7415000609148162326}
+  - component: {fileID: 8040917401896854421}
   m_Layer: 6
   m_Name: Player 1
   m_TagString: Player
@@ -331,6 +332,9 @@ MonoBehaviour:
     m_Bits: 1
   ImpactPrefab: {fileID: 921809749201012083, guid: 7b3d9616a600e0a408561256ba1be9d9, type: 3}
   MuzzleParticle: {fileID: 2310922988817635306}
+  DashSpeed: 10
+  DashDuration: 0.25
+  DashCooldown: 1
   ChestTargetPosition: {fileID: 536988984119202717}
   ChestBone: {fileID: 4378601573072654920}
   FireSound: {fileID: 3515788271502590058}
@@ -358,6 +362,8 @@ MonoBehaviour:
   VisualRoot: {fileID: 3041271417471768361}
   DeathRoot: {fileID: 8394160489372375921}
   _CurrentHealth: 0
+  _IsInvulnerable:
+    _value: 0
 --- !u!114 &8261807108443789817
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -373,7 +379,7 @@ MonoBehaviour:
   _stateAuthorityChangeErrorCorrectionDelta: 0
   _settings:
     Shape: 1
-    IsTrigger: 0
+    IsTrigger: 1
     Radius: 0.4
     Height: 1
     Extent: 0.035
@@ -439,6 +445,27 @@ MonoBehaviour:
   Offset: {x: 0, y: 0.8, z: 0}
   GizmosColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   Hitboxes: []
+--- !u!65 &8040917401896854421
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3123905968297068043}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.3827212, y: 1.7960112, z: 0.4617516}
+  m_Center: {x: -0.027970731, y: 0.8450378, z: -0.034778103}
 --- !u!1 &3226221424221943437
 GameObject:
   m_ObjectHideFlags: 0
