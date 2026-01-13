@@ -23,13 +23,17 @@ namespace Starter.Shooter
 
 		[Networked, HideInInspector, OnChangedRender(nameof(OnCurrentHealthChanged))]
 		public int CurrentHealth { get; set; }
-
+		[Networked]
+		public NetworkBool IsInvulnerable { get; set; }
 		[Networked]
 		private TickTimer _deathCooldown { get; set; }
 
 		public bool TakeHit(int damage)
 		{
 			if (IsAlive == false)
+				return false;
+			
+			if (IsInvulnerable)
 				return false;
 
 			CurrentHealth -= damage;

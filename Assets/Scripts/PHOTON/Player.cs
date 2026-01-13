@@ -39,6 +39,11 @@ namespace Starter.Shooter
 		public LayerMask HitMask;
 		public GameObject ImpactPrefab;
 		public ParticleSystem MuzzleParticle;
+		
+		[Header("Dash Setup")]
+		public float DashSpeed = 10f;       
+		public float DashDuration = 0.25f;  
+		public float DashCooldown = 1.0f;  
 
 		[Header("Animation Setup")]
 		public Transform ChestTargetPosition;
@@ -68,6 +73,12 @@ namespace Starter.Shooter
 		private Vector3 _hitNormal { get; set; }
 		[Networked]
 		private int _fireCount { get; set; }
+		[Networked]
+		private float _dashTimer { get; set; }        
+		[Networked]
+		private float _dashCooldownTimer { get; set; } 
+		[Networked]
+		private NetworkBool _isInvulnerable { get; set; } 
 
 		// Animation IDs
 		private int _animIDSpeedX;
@@ -137,6 +148,28 @@ namespace Starter.Shooter
 
 		public override void FixedUpdateNetwork()
 		{
+			if (_dashTimer > 0f)
+			{
+				_dashTimer -= Runner.DeltaTime;
+				if (_dashTimer <= 0f)
+				{
+					_dashTimer = 0f;
+					_isInvulnerable = false; // Fin de la inmunidad
+					
+					if(Health != null)
+					{
+						Health.IsInvulnerable = false;
+					}
+				}
+			}
+
+			if (_dashCooldownTimer > 0f)
+			{
+				_dashCooldownTimer -= Runner.DeltaTime;
+				if (_dashCooldownTimer < 0f)
+					_dashCooldownTimer = 0f;
+			}
+
 			if (Health.IsAlive && GetInput<GameplayInput>(out var input))
 			{
 				ProcessInput(input, Input.PreviousButtons);
@@ -230,6 +263,11 @@ namespace Starter.Shooter
 				jumpImpulse = JumpImpulse;
 				_isJumping = true;
 			}
+			
+			if (input.Buttons.WasPressed(previousButtons, EInputButton.Dash))
+			{
+				TryStartDash(moveDirection);
+			}
 
 			MovePlayer(desiredMoveVelocity, jumpImpulse);
 
@@ -248,6 +286,16 @@ namespace Starter.Shooter
 			// It feels better when the player falls quicker
 			KCC.SetGravity(KCC.RealVelocity.y >= 0f ? UpGravity : DownGravity);
 
+			// Si estamos en dash, la velocidad la controla el dash
+			if (_dashTimer > 0f)
+			{
+				// Mantén la velocidad de dash (no la interpolamos hacia desiredMoveVelocity)
+				// Opcional: podrías ir reduciendo poco a poco si quieres un dash que se frene
+				KCC.Move(_moveVelocity, jumpImpulse: 0f); // normalmente sin salto durante dash
+				return;
+			}
+			
+			
 			float acceleration;
 			if (desiredMoveVelocity == Vector3.zero)
 			{
@@ -263,7 +311,33 @@ namespace Starter.Shooter
 
 			KCC.Move(_moveVelocity, jumpImpulse);
 		}
+		
+		
+		private void TryStartDash(Vector3 moveDirection)
+		{
+			// No puedes hacer dash si estás ya dashing o en cooldown o muerto
+			if (_dashTimer > 0f || _dashCooldownTimer > 0f || Health.IsAlive == false)
+				return;
 
+			// Si no hay dirección de movimiento, que dáshee hacia adelante
+			if (moveDirection.sqrMagnitude < 0.01f)
+			{
+				moveDirection = KCC.TransformRotation * Vector3.forward;
+			}
+
+			moveDirection.Normalize();
+
+			// Activar dash
+			_dashTimer = DashDuration;
+			_dashCooldownTimer = DashCooldown + DashDuration; // cooldown empieza al acabar el dash
+			_isInvulnerable = true;
+
+			// Aplicar impulso inmediato en la dirección de dash
+			// Sumamos a la velocidad actual
+			_moveVelocity = moveDirection * DashSpeed;
+		}
+
+		
 		private void Fire()
 		{
 			// Clear hit position in case nothing will be hit

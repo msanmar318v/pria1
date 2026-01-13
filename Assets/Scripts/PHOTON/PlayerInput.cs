@@ -7,6 +7,7 @@ namespace Starter.Shooter
 	{
 		Jump,
 		Fire,
+		Dash,
 	}
 
 	/// <summary>
@@ -78,6 +79,8 @@ namespace Starter.Shooter
 
 			_input.Buttons.Set(EInputButton.Fire, Input.GetButton("Fire1"));
 			_input.Buttons.Set(EInputButton.Jump, Input.GetButton("Jump"));
+			
+			_input.Buttons.Set(EInputButton.Dash, Input.GetKey(KeyCode.LeftShift));
 		}
 
 		// AfterTick is called after all FixedUpdateNetwork calls on NetworkBehaviours were executed for this tick.
