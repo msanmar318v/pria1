@@ -337,10 +337,13 @@ MonoBehaviour:
   - {fileID: 4585380174853453699}
   - {fileID: 4193848799169537096}
   - {fileID: 7048695685947523147}
-  SpineInfluenceMultiplier: 0.6
-  IKLerpSpeed: 12
+  SpineInfluenceMultiplier: 0.4
+  MaxSpineRotationAngle: 52.5
   HeadBone: {fileID: 922781222797084472}
-  CameraOffset: {x: 0, y: 0.1, z: 0.05}
+  CameraOffset: {x: 0, y: 0, z: 0}
+  VerticalMovementThreshold: 0.02
+  HorizontalDampingStrength: 0.1
+  OscillationSmoothSpeed: 20
   FireSound: {fileID: 3515788271502590058}
   FootstepSound: {fileID: 7822257894759364770}
   JumpAudioClip: {fileID: 8300000, guid: 111193ad93ba31640ba3bdc4695615fa, type: 3}
@@ -16066,31 +16069,31 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 688644825341151264, guid: 41236ddb97b001d499cadd3503c086dc, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.4952395
+      value: 0.53473485
       objectReference: {fileID: 0}
     - target: {fileID: 688644825341151264, guid: 41236ddb97b001d499cadd3503c086dc, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0.4977346
+      value: -0.53742915
       objectReference: {fileID: 0}
     - target: {fileID: 688644825341151264, guid: 41236ddb97b001d499cadd3503c086dc, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0.50475043
+      value: -0.4622585
       objectReference: {fileID: 0}
     - target: {fileID: 688644825341151264, guid: 41236ddb97b001d499cadd3503c086dc, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.50222015
+      value: -0.4599411
       objectReference: {fileID: 0}
     - target: {fileID: 688644825341151264, guid: 41236ddb97b001d499cadd3503c086dc, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: -90.288
+      value: -90.286
       objectReference: {fileID: 0}
     - target: {fileID: 688644825341151264, guid: 41236ddb97b001d499cadd3503c086dc, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
+      value: -0.0010070801
       objectReference: {fileID: 0}
     - target: {fileID: 688644825341151264, guid: 41236ddb97b001d499cadd3503c086dc, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
-      value: -90.802
+      value: -81.39899
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

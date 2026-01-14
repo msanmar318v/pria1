@@ -54,6 +54,9 @@ namespace Starter.Shooter
         [Tooltip("Cuánto afecta la rotación de la cámara a cada hueso (0 = nada, 1 = completamente)")]
         [Range(0f, 1f)]
         public float SpineInfluenceMultiplier = 0.6f;
+        [Tooltip("Límite máximo de rotación del IK de la columna en grados")]
+        [Range(0f, 70f)]
+        public float MaxSpineRotationAngle = 45f; // NUEVO PARÁMETRO
         [Tooltip("Hueso de la cabeza para posicionar el CameraPivot")]
         public Transform HeadBone;
         [Tooltip("Offset de la cámara respecto a la cabeza")]
@@ -302,42 +305,42 @@ namespace Starter.Shooter
             if (HeadBone == null)
                 return;
 
-            // CLAVE: Calcular la posición "ideal" de la cabeza basada SOLO en el KCC (sin animaciones)
-            Vector3 kccMovement = KCC.Position - _previousKCCPosition;
-            _previousKCCPosition = KCC.Position;
+            // SOLUCIÓN SIMPLE: Seguir directamente la posición del HeadBone
+            // pero con filtrado suave solo para oscilaciones de alta frecuencia
+            Vector3 targetHeadPosition = HeadBone.position;
 
-            // Posición base: KCC + offset local del HeadBone inicial
-            Vector3 idealHeadPosition = KCC.Position + transform.TransformDirection(Vector3.up * 1.6f);
-
-            // Posición REAL de la cabeza (incluye animaciones de caminar)
-            Vector3 actualHeadPosition = HeadBone.position;
-
-            // Calcular la DIFERENCIA entre la posición ideal y la real
-            Vector3 animationOscillation = actualHeadPosition - idealHeadPosition;
-
-            // Filtrar oscilaciones pequeñas
-            if (Mathf.Abs(animationOscillation.y) < VerticalMovementThreshold)
+            // Calcular la velocidad de cambio de posición
+            Vector3 positionDelta = targetHeadPosition - (CameraPivot.position - HeadBone.TransformDirection(CameraOffset));
+            
+            // Si el cambio es grande (IK/agacharse), seguirlo inmediatamente
+            // Si es pequeño (oscilaciones de caminar), suavizarlo
+            float deltamagnitude = positionDelta.magnitude;
+            float smoothSpeed;
+            
+            if (deltamagnitude > 0.05f) // Movimiento grande (IK)
             {
-                animationOscillation.y = 0f;
+                smoothSpeed = 50f; // Seguir muy rápido (casi instantáneo)
+            }
+            else if (deltamagnitude > VerticalMovementThreshold) // Movimiento mediano
+            {
+                smoothSpeed = 20f; // Seguir rápido
+            }
+            else // Oscilaciones pequeñas
+            {
+                smoothSpeed = OscillationSmoothSpeed; // Filtrar más
             }
 
-            animationOscillation.x *= HorizontalDampingStrength;
-            animationOscillation.z *= HorizontalDampingStrength;
+            // POSICIÓN: Seguir la cabeza con suavizado adaptativo
+            Vector3 targetPosition = targetHeadPosition + HeadBone.TransformDirection(CameraOffset);
+            CameraPivot.position = Vector3.Lerp(CameraPivot.position, targetPosition, Time.deltaTime * smoothSpeed);
 
-            // Suavizar solo las oscilaciones
-            _filteredHeadOffset = Vector3.Lerp(_filteredHeadOffset, animationOscillation, Time.deltaTime * OscillationSmoothSpeed);
-
-            // POSICIÓN FINAL
-            Vector3 finalHeadPosition = idealHeadPosition + _filteredHeadOffset;
-            Vector3 targetPosition = finalHeadPosition + transform.TransformDirection(CameraOffset);
-
-            CameraPivot.position = targetPosition;
-
-            // ROTACIÓN SIMPLIFICADA: usar directamente la rotación del transform + pitch del jugador
-            // Esto evita completamente el Gimbal Lock
+            // ROTACIÓN: usar directamente la rotación del transform + pitch del jugador
             Quaternion baseRotation = Quaternion.Euler(0, transform.eulerAngles.y, 0);
             Quaternion pitchRotationQuat = Quaternion.Euler(pitchRotation.x, 0, 0);
             CameraPivot.rotation = baseRotation * pitchRotationQuat;
+            
+            // Actualizar tracking
+            _previousKCCPosition = KCC.Position;
 }
 
 private void ApplySpineIK(float pitchAngle)
@@ -348,8 +351,8 @@ private void ApplySpineIK(float pitchAngle)
         return;
     }
 
-    // Limitar el ángulo AGRESIVAMENTE para evitar rotaciones extremas
-    pitchAngle = Mathf.Clamp(pitchAngle, -70f, 70f);
+    // USAR EL PARÁMETRO CONFIGURABLE
+    pitchAngle = Mathf.Clamp(pitchAngle, -MaxSpineRotationAngle, MaxSpineRotationAngle);
 
     // Aplicar rotación progresiva a cada hueso de la columna
     for (int i = 0; i < SpineBones.Length; i++)
@@ -367,8 +370,7 @@ private void ApplySpineIK(float pitchAngle)
         // Usar la rotación capturada del Animator
         Quaternion animatorRotation = _spineAnimatorRotations[i];
         
-        // SOLUCIÓN SIMPLIFICADA: Aplicar rotación en espacio local directamente
-        // Usar el eje Right LOCAL del hueso para evitar problemas de espacio world
+        // Aplicar rotación en espacio local directamente
         Vector3 localRight = SpineBones[i].parent != null 
             ? SpineBones[i].parent.InverseTransformDirection(transform.right)
             : Vector3.right;
