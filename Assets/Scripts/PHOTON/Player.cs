@@ -110,6 +110,7 @@ namespace Starter.Shooter
         private int _animIDPitch;
         private int _animIDShoot;
         private int _animIDJumping;
+        private int _animIDSpeed; // NUEVO: Velocidad total
 
         private int _visibleFireCount;
         
@@ -178,6 +179,22 @@ namespace Starter.Shooter
                 // Look rotation interpolation is skipped for local player.
                 // Look rotation is set manually in Render.
                 KCC.Settings.ForcePredictedLookRotation = true;
+            }
+
+            // SOLUCIÓN: Configurar el Animator para sincronización perfecta
+            if (Animator != null)
+            {
+                // Actualizar en cada frame (no en física) para suavidad máxima
+                Animator.updateMode = AnimatorUpdateMode.Normal;
+                
+                // Siempre animar, incluso cuando no es visible
+                Animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                
+                // CRÍTICO: Desactivar el root motion si está activado (puede causar jitter)
+                Animator.applyRootMotion = false;
+                
+                // Estabilizar el Animator
+                Animator.stabilizeFeet = false; // Desactivar IK de pies del Animator (usamos nuestro propio IK)
             }
 
             // Inicializar posición del KCC
@@ -254,14 +271,19 @@ namespace Starter.Shooter
             // Transform velocity vector to local space.
             var moveSpeed = transform.InverseTransformVector(KCC.RealVelocity);
 
-            Animator.SetFloat(_animIDSpeedX, moveSpeed.x, 0.1f, Time.deltaTime);
-            Animator.SetFloat(_animIDSpeedZ, moveSpeed.z, 0.1f, Time.deltaTime);
-            Animator.SetBool(_animIDGrounded, KCC.IsGrounded);
-            Animator.SetFloat(_animIDPitch, KCC.GetLookRotation(true, false).x, 0.02f, Time.deltaTime);
+            // SOLUCIÓN: Calcular la magnitud total del movimiento horizontal
+            float totalSpeed = new Vector2(moveSpeed.x, moveSpeed.z).magnitude;
 
-            // Actualizar la animación de salto
-            bool shouldBeJumping = _isPlayingJumpAnimation;
-            Animator.SetBool(_animIDJumping, shouldBeJumping);
+            Animator.SetFloat(_animIDSpeedX, moveSpeed.x);
+            Animator.SetFloat(_animIDSpeedZ, moveSpeed.z);
+            Animator.SetFloat(_animIDSpeed, totalSpeed); // NUEVO: Enviar velocidad total
+            Animator.SetBool(_animIDGrounded, KCC.IsGrounded);
+            
+            // Para el pitch, mantener un poco de suavizado pero reducido
+            Animator.SetFloat(_animIDPitch, KCC.GetLookRotation(true, false).x, 0.01f, Time.deltaTime);
+
+            // Actualizar la animación de salto - sin suavizado
+            Animator.SetBool(_animIDJumping, _isPlayingJumpAnimation);
 
             FootstepSound.enabled = KCC.IsGrounded && KCC.RealSpeed > 1f;
             ScalingRoot.localScale = Vector3.Lerp(ScalingRoot.localScale, Vector3.one, Time.deltaTime * 8f);
@@ -305,29 +327,26 @@ namespace Starter.Shooter
             if (HeadBone == null)
                 return;
 
-            // SOLUCIÓN SIMPLE: Seguir directamente la posición del HeadBone
-            // pero con filtrado suave solo para oscilaciones de alta frecuencia
             Vector3 targetHeadPosition = HeadBone.position;
 
             // Calcular la velocidad de cambio de posición
             Vector3 positionDelta = targetHeadPosition - (CameraPivot.position - HeadBone.TransformDirection(CameraOffset));
             
-            // Si el cambio es grande (IK/agacharse), seguirlo inmediatamente
-            // Si es pequeño (oscilaciones de caminar), suavizarlo
-            float deltamagnitude = positionDelta.magnitude;
+            float deltaMagnitude = positionDelta.magnitude;
             float smoothSpeed;
             
-            if (deltamagnitude > 0.05f) // Movimiento grande (IK)
+            // SOLUCIÓN: Aumentar velocidades para seguimiento más responsivo
+            if (deltaMagnitude > 0.05f) // Movimiento grande (IK)
             {
-                smoothSpeed = 50f; // Seguir muy rápido (casi instantáneo)
+                smoothSpeed = 100f; // AUMENTADO: Seguir instantáneamente (antes 50f)
             }
-            else if (deltamagnitude > VerticalMovementThreshold) // Movimiento mediano
+            else if (deltaMagnitude > VerticalMovementThreshold) // Movimiento mediano
             {
-                smoothSpeed = 20f; // Seguir rápido
+                smoothSpeed = 40f; // AUMENTADO: Seguir más rápido (antes 20f)
             }
             else // Oscilaciones pequeñas
             {
-                smoothSpeed = OscillationSmoothSpeed; // Filtrar más
+                smoothSpeed = OscillationSmoothSpeed; // Mantener configurable
             }
 
             // POSICIÓN: Seguir la cabeza con suavizado adaptativo
@@ -524,6 +543,7 @@ private void ApplySpineIK(float pitchAngle)
         {
             _animIDSpeedX = Animator.StringToHash("SpeedX");
             _animIDSpeedZ = Animator.StringToHash("SpeedZ");
+            _animIDSpeed = Animator.StringToHash("Speed"); // NUEVO
             _animIDGrounded = Animator.StringToHash("Grounded");
             _animIDPitch = Animator.StringToHash("Pitch");
             _animIDShoot = Animator.StringToHash("Shoot");
