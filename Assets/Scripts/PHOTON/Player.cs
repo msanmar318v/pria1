@@ -48,15 +48,15 @@ namespace Starter.Shooter
 
         [Header("Animation Setup")]
         public Transform ChestTargetPosition;
-        public Transform ChestBone; // Spine5 (el último)
+        public Transform ChestBone; // Ultimo Spine del jugador
         [Tooltip("Asigna todos los huesos de la columna desde Spine1 hasta Spine5")]
-        public Transform[] SpineBones; // Array con Spine1, Spine2, Spine3, Spine4, Spine5
+        public Transform[] SpineBones; // Array con Spines del jugador
         [Tooltip("Cuánto afecta la rotación de la cámara a cada hueso (0 = nada, 1 = completamente)")]
         [Range(0f, 1f)]
         public float SpineInfluenceMultiplier = 0.6f;
         [Tooltip("Límite máximo de rotación del IK de la columna en grados")]
         [Range(0f, 70f)]
-        public float MaxSpineRotationAngle = 45f; // NUEVO PARÁMETRO
+        public float MaxSpineRotationAngle = 45f;
         [Tooltip("Hueso de la cabeza para posicionar el CameraPivot")]
         public Transform HeadBone;
         [Tooltip("Offset de la cámara respecto a la cabeza")]
@@ -110,14 +110,12 @@ namespace Starter.Shooter
         private int _animIDPitch;
         private int _animIDShoot;
         private int _animIDJumping;
-        private int _animIDSpeed; // NUEVO: Velocidad total
+        private int _animIDSpeed;
 
         private int _visibleFireCount;
-        
-        // Cache para rotaciones del animator
+
         private Quaternion[] _spineAnimatorRotations;
-        
-        // Cache para filtrado de oscilaciones
+
         private Vector3 _previousKCCPosition;
         private Vector3 _filteredHeadOffset;
 
@@ -142,27 +140,19 @@ namespace Starter.Shooter
         {
             if (HasInputAuthority)
             {
-                // Sending player nickname that is saved in UIGameMenu
                 RPC_SetNickname(PlayerPrefs.GetString("PlayerName"));
             }
 
-            // In case the nickname is already changed,
-            // we need to trigger the change manually
             OnNicknameChanged();
-
-            // Reset visible fire count
             _visibleFireCount = _fireCount;
 
             if (HasInputAuthority)
             {
-                // For input authority deactivate head renderers so they are not obstructing the view
                 for (int i = 0; i < HeadRenderers.Length; i++)
                 {
                     HeadRenderers[i].shadowCastingMode = ShadowCastingMode.ShadowsOnly;
                 }
 
-                // Some objects (e.g. weapon) are renderer with secondary Overlay camera.
-                // This prevents weapon clipping into the wall when close to the wall.
                 int overlayLayer = LayerMask.NameToLayer("FirstPersonOverlay");
 
                 if (overlayLayer != -1)
@@ -176,28 +166,17 @@ namespace Starter.Shooter
                     }
                 }
 
-                // Look rotation interpolation is skipped for local player.
-                // Look rotation is set manually in Render.
                 KCC.Settings.ForcePredictedLookRotation = true;
             }
 
-            // SOLUCIÓN: Configurar el Animator para sincronización perfecta
             if (Animator != null)
             {
-                // Actualizar en cada frame (no en física) para suavidad máxima
                 Animator.updateMode = AnimatorUpdateMode.Normal;
-                
-                // Siempre animar, incluso cuando no es visible
                 Animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-                
-                // CRÍTICO: Desactivar el root motion si está activado (puede causar jitter)
                 Animator.applyRootMotion = false;
-                
-                // Estabilizar el Animator
-                Animator.stabilizeFeet = false; // Desactivar IK de pies del Animator (usamos nuestro propio IK)
+                Animator.stabilizeFeet = false;
             }
 
-            // Inicializar posición del KCC
             _previousKCCPosition = KCC.Position;
         }
 
@@ -209,53 +188,36 @@ namespace Starter.Shooter
             }
             else
             {
-                // Continue with KCC movement (e.g. fall) even
-                // when player is dead or input is missing.
                 MovePlayer(Vector3.zero, 0f);
             }
-
-            // Procesar el salto solicitado
             if (_jumpRequested && KCC.IsGrounded && !_jumpTimer.IsRunning)
             {
                 _jumpRequested = false;
-
-                // PRIMERO: Activar la animación INMEDIATAMENTE
                 _isPlayingJumpAnimation = true;
-
-                // SEGUNDO: Configurar el timer para aplicar el impulso después del delay
                 if (JumpDelay > 0)
                 {
                     _jumpTimer = TickTimer.CreateFromSeconds(Runner, JumpDelay);
                 }
                 else
                 {
-                    // Sin delay, aplicar impulso inmediatamente
                     _isJumping = true;
                     KCC.Move(_moveVelocity, JumpImpulse);
                 }
             }
-
-            // Check if it's time to apply the jump impulse
             if (_jumpTimer.IsRunning && _jumpTimer.Expired(Runner))
             {
-                // TERCERO: Aplicar el impulso real después del delay
                 _isJumping = true;
                 KCC.Move(_moveVelocity, JumpImpulse);
                 _jumpTimer = TickTimer.None;
             }
-
-            // CUARTO: Resetear la animación cuando aterrizamos
             if (KCC.IsGrounded && _isJumping)
             {
-                // Solo resetear si ya hemos saltado (velocity cayendo)
                 if (KCC.RealVelocity.y <= 0.1f)
                 {
                     _isJumping = false;
                     _isPlayingJumpAnimation = false;
                 }
             }
-
-            // Disable collisions and hits when player is dead
             HitboxRoot.HitboxRootActive = Health.IsAlive;
             KCC.SetActive(Health.IsAlive);
         }
@@ -264,25 +226,17 @@ namespace Starter.Shooter
         {
             if (HasInputAuthority)
             {
-                // Set look rotation for Render.
                 KCC.SetLookRotation(Input.LookRotation, -90f, 90f);
             }
-
-            // Transform velocity vector to local space.
             var moveSpeed = transform.InverseTransformVector(KCC.RealVelocity);
-
-            // SOLUCIÓN: Calcular la magnitud total del movimiento horizontal
             float totalSpeed = new Vector2(moveSpeed.x, moveSpeed.z).magnitude;
 
             Animator.SetFloat(_animIDSpeedX, moveSpeed.x);
             Animator.SetFloat(_animIDSpeedZ, moveSpeed.z);
-            Animator.SetFloat(_animIDSpeed, totalSpeed); // NUEVO: Enviar velocidad total
+            Animator.SetFloat(_animIDSpeed, totalSpeed);
             Animator.SetBool(_animIDGrounded, KCC.IsGrounded);
-            
-            // Para el pitch, mantener un poco de suavizado pero reducido
-            Animator.SetFloat(_animIDPitch, KCC.GetLookRotation(true, false).x, 0.01f, Time.deltaTime);
 
-            // Actualizar la animación de salto - sin suavizado
+            Animator.SetFloat(_animIDPitch, KCC.GetLookRotation(true, false).x, 0.01f, Time.deltaTime);
             Animator.SetBool(_animIDJumping, _isPlayingJumpAnimation);
 
             FootstepSound.enabled = KCC.IsGrounded && KCC.RealSpeed > 1f;
@@ -305,17 +259,14 @@ namespace Starter.Shooter
             if (Health.IsAlive == false)
                 return;
 
-            // PASO 1: Capturar las rotaciones del Animator ANTES de modificarlas
             CaptureAnimatorRotations();
 
-            // PASO 2: Aplicar IK a la columna vertebral
             var pitchRotation = KCC.GetLookRotation(true, false);
+
             ApplySpineIK(pitchRotation.x);
 
-            // PASO 3: Actualizar posición Y ROTACIÓN del CameraPivot SIN lag de movimiento
             UpdateCameraPivotTransform(pitchRotation);
 
-            // Only InputAuthority needs to update camera
             if (HasInputAuthority)
             {
                 Camera.main.transform.SetPositionAndRotation(CameraHandle.position, CameraHandle.rotation);
@@ -328,85 +279,65 @@ namespace Starter.Shooter
                 return;
 
             Vector3 targetHeadPosition = HeadBone.position;
-
-            // Calcular la velocidad de cambio de posición
             Vector3 positionDelta = targetHeadPosition - (CameraPivot.position - HeadBone.TransformDirection(CameraOffset));
-            
+
             float deltaMagnitude = positionDelta.magnitude;
             float smoothSpeed;
-            
-            // SOLUCIÓN: Aumentar velocidades para seguimiento más responsivo
-            if (deltaMagnitude > 0.05f) // Movimiento grande (IK)
+            if (deltaMagnitude > 0.05f)
             {
-                smoothSpeed = 100f; // AUMENTADO: Seguir instantáneamente (antes 50f)
+                smoothSpeed = 100f;
             }
-            else if (deltaMagnitude > VerticalMovementThreshold) // Movimiento mediano
+            else if (deltaMagnitude > VerticalMovementThreshold)
             {
-                smoothSpeed = 40f; // AUMENTADO: Seguir más rápido (antes 20f)
+                smoothSpeed = 40f;
             }
-            else // Oscilaciones pequeñas
+            else
             {
-                smoothSpeed = OscillationSmoothSpeed; // Mantener configurable
+                smoothSpeed = OscillationSmoothSpeed;
             }
-
-            // POSICIÓN: Seguir la cabeza con suavizado adaptativo
             Vector3 targetPosition = targetHeadPosition + HeadBone.TransformDirection(CameraOffset);
             CameraPivot.position = Vector3.Lerp(CameraPivot.position, targetPosition, Time.deltaTime * smoothSpeed);
-
-            // ROTACIÓN: usar directamente la rotación del transform + pitch del jugador
             Quaternion baseRotation = Quaternion.Euler(0, transform.eulerAngles.y, 0);
             Quaternion pitchRotationQuat = Quaternion.Euler(pitchRotation.x, 0, 0);
             CameraPivot.rotation = baseRotation * pitchRotationQuat;
-            
-            // Actualizar tracking
+
             _previousKCCPosition = KCC.Position;
-}
+        }
 
-private void ApplySpineIK(float pitchAngle)
-{
-    // Si no hay huesos configurados, salir
-    if (SpineBones == null || SpineBones.Length == 0 || _spineAnimatorRotations == null)
-    {
-        return;
-    }
+        private void ApplySpineIK(float pitchAngle)
+        {
+            if (SpineBones == null || SpineBones.Length == 0 || _spineAnimatorRotations == null)
+            {
+                return;
+            }
 
-    // USAR EL PARÁMETRO CONFIGURABLE
-    pitchAngle = Mathf.Clamp(pitchAngle, -MaxSpineRotationAngle, MaxSpineRotationAngle);
+            pitchAngle = Mathf.Clamp(pitchAngle, -MaxSpineRotationAngle, MaxSpineRotationAngle);
+            for (int i = 0; i < SpineBones.Length; i++)
+            {
+                if (SpineBones[i] == null)
+                    continue;
 
-    // Aplicar rotación progresiva a cada hueso de la columna
-    for (int i = 0; i < SpineBones.Length; i++)
-    {
-        if (SpineBones[i] == null)
-            continue;
+                float normalizedIndex = (float)(i + 1) / SpineBones.Length;
+                float influence = normalizedIndex * SpineInfluenceMultiplier;
+                float additionalRotation = pitchAngle * influence;
 
-        // Calcular influencia progresiva: los huesos superiores rotan más
-        float normalizedIndex = (float)(i + 1) / SpineBones.Length;
-        float influence = normalizedIndex * SpineInfluenceMultiplier;
+                Quaternion animatorRotation = _spineAnimatorRotations[i];
 
-        // Calcular la rotación adicional basada en el pitch
-        float additionalRotation = pitchAngle * influence;
-        
-        // Usar la rotación capturada del Animator
-        Quaternion animatorRotation = _spineAnimatorRotations[i];
-        
-        // Aplicar rotación en espacio local directamente
-        Vector3 localRight = SpineBones[i].parent != null 
-            ? SpineBones[i].parent.InverseTransformDirection(transform.right)
-            : Vector3.right;
-        
-        Quaternion ikRotation = Quaternion.AngleAxis(additionalRotation, localRight);
-        
-        // Aplicar la rotación de forma estable
-        SpineBones[i].localRotation = animatorRotation * ikRotation;
-    }
-}
+                Vector3 localRight = SpineBones[i].parent != null
+                    ? SpineBones[i].parent.InverseTransformDirection(transform.right)
+                    : Vector3.right;
+
+                Quaternion ikRotation = Quaternion.AngleAxis(additionalRotation, localRight);
+
+                SpineBones[i].localRotation = animatorRotation * ikRotation;
+            }
+        }
 
         private void CaptureAnimatorRotations()
         {
             if (SpineBones == null || _spineAnimatorRotations == null)
                 return;
 
-            // Guardar la rotación actual (que viene del Animator) antes de aplicar IK
             for (int i = 0; i < SpineBones.Length; i++)
             {
                 if (SpineBones[i] != null)
@@ -427,12 +358,9 @@ private void ApplySpineIK(float pitchAngle)
         private void ProcessInput(GameplayInput input, NetworkButtons previousButtons)
         {
             KCC.SetLookRotation(input.LookRotation, -90f, 90f);
-
-            // Calculate correct move direction from input (rotated based on latest KCC rotation)
             var moveDirection = KCC.TransformRotation * new Vector3(input.MoveDirection.x, 0f, input.MoveDirection.y);
             var desiredMoveVelocity = moveDirection * WalkSpeed;
 
-            // CORRECCIÓN FINAL: Solo permitir salto si está grounded Y no hay ningún salto en progreso
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Jump))
             {
                 // Solo procesar el salto si:
@@ -441,9 +369,9 @@ private void ApplySpineIK(float pitchAngle)
                 // 3. No hay un timer de salto activo
                 // 4. No está ya saltando
                 // 5. No está reproduciendo la animación de salto
-                if (KCC.IsGrounded && 
-                    !_jumpRequested && 
-                    !_jumpTimer.IsRunning && 
+                if (KCC.IsGrounded &&
+                    !_jumpRequested &&
+                    !_jumpTimer.IsRunning &&
                     !_isJumping &&
                     !_isPlayingJumpAnimation)
                 {
@@ -452,7 +380,6 @@ private void ApplySpineIK(float pitchAngle)
                 // Si alguna de las condiciones falla, ignorar completamente la solicitud
             }
 
-            // El impulso de salto ahora se aplica en FixedUpdateNetwork cuando el timer expira
             MovePlayer(desiredMoveVelocity, 0f);
 
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Fire))
@@ -463,13 +390,11 @@ private void ApplySpineIK(float pitchAngle)
 
         private void MovePlayer(Vector3 desiredMoveVelocity, float jumpImpulse)
         {
-            // It feels better when the player falls quicker
             KCC.SetGravity(KCC.RealVelocity.y >= 0f ? UpGravity : DownGravity);
 
             float acceleration;
             if (desiredMoveVelocity == Vector3.zero)
             {
-                // No desired move velocity - we are stopping
                 acceleration = KCC.IsGrounded ? GroundDeceleration : AirDeceleration;
             }
             else
@@ -484,45 +409,28 @@ private void ApplySpineIK(float pitchAngle)
 
         private void Fire()
         {
-            // Clear hit position in case nothing will be hit
             _hitPosition = Vector3.zero;
 
             var hitOptions = HitOptions.IncludePhysX | HitOptions.IgnoreInputAuthority;
-
-            // Whole projectile path and effects are immediately processed (= hitscan projectile)
             if (Runner.LagCompensation.Raycast(CameraHandle.position, CameraHandle.forward, 200f,
                     Object.InputAuthority, out var hit, HitMask, hitOptions, QueryTriggerInteraction.Ignore) == true)
             {
-                // Deal damage
                 var health = hit.Hitbox != null ? hit.Hitbox.Root.GetComponent<Health>() : null;
                 if (health != null && health.TakeHit(1))
                 {
                     if (health.IsAlive == false)
                     {
-                        // Killing chicken grants 1 point, killing other player has -10 points penalty.
                         ChickenKills += health.GetComponent<Chicken>() != null ? 1 : -10;
                     }
                 }
-
-                // Save hit point to correctly show bullet path on all clients.
-                // This however works only for single projectile per FUN and with higher fire cadence
-                // some projectiles might not be fired on proxies because we save only the position
-                // of the LAST hit.
                 _hitPosition = hit.Point;
                 _hitNormal = hit.Normal;
             }
-
-            // In this example projectile count property (fire count) is used not only for weapon fire effects
-            // but to spawn the projectile visuals themselves.
             _fireCount++;
         }
 
         private void ShowFireEffects()
         {
-            // Notice we are not using OnChangedRender for fireCount property but instead
-            // we are checking against a local variable and show fire effects only when visible
-            // fire count is SMALLER. This prevents triggering false fire effects when
-            // local player mispredicted fire (e.g. input got lost) and fireCount property got decreased.
             if (_visibleFireCount < _fireCount)
             {
                 FireSound.PlayOneShot(FireSound.clip);
@@ -531,7 +439,6 @@ private void ApplySpineIK(float pitchAngle)
 
                 if (_hitPosition != Vector3.zero)
                 {
-                    // Impact gets destroyed automatically with DestroyAfter script
                     Instantiate(ImpactPrefab, _hitPosition, Quaternion.LookRotation(_hitNormal));
                 }
             }
@@ -543,7 +450,7 @@ private void ApplySpineIK(float pitchAngle)
         {
             _animIDSpeedX = Animator.StringToHash("SpeedX");
             _animIDSpeedZ = Animator.StringToHash("SpeedZ");
-            _animIDSpeed = Animator.StringToHash("Speed"); // NUEVO
+            _animIDSpeed = Animator.StringToHash("Speed");
             _animIDGrounded = Animator.StringToHash("Grounded");
             _animIDPitch = Animator.StringToHash("Pitch");
             _animIDShoot = Animator.StringToHash("Shoot");
@@ -560,17 +467,12 @@ private void ApplySpineIK(float pitchAngle)
             {
                 AudioSource.PlayClipAtPoint(LandAudioClip, KCC.Position, 1f);
             }
-
-            if (HasInputAuthority == false)
-            {
-                ScalingRoot.localScale = _isJumping ? new Vector3(0.5f, 1.5f, 0.5f) : new Vector3(1.25f, 0.75f, 1.25f);
-            }
         }
 
         private void OnNicknameChanged()
         {
             if (HasInputAuthority)
-                return; // Do not show nickname for local player
+                return;
 
             Nameplate.SetNickname(Nickname);
         }
