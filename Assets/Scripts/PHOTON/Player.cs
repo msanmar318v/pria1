@@ -413,10 +413,24 @@ private void ApplySpineIK(float pitchAngle)
             var moveDirection = KCC.TransformRotation * new Vector3(input.MoveDirection.x, 0f, input.MoveDirection.y);
             var desiredMoveVelocity = moveDirection * WalkSpeed;
 
-            // Comparing current input buttons to previous input buttons - this prevents glitches when input is lost
+            // CORRECCIÓN FINAL: Solo permitir salto si está grounded Y no hay ningún salto en progreso
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Jump))
             {
-                _jumpRequested = true;
+                // Solo procesar el salto si:
+                // 1. El jugador está en el suelo
+                // 2. No hay una solicitud de salto pendiente
+                // 3. No hay un timer de salto activo
+                // 4. No está ya saltando
+                // 5. No está reproduciendo la animación de salto
+                if (KCC.IsGrounded && 
+                    !_jumpRequested && 
+                    !_jumpTimer.IsRunning && 
+                    !_isJumping &&
+                    !_isPlayingJumpAnimation)
+                {
+                    _jumpRequested = true;
+                }
+                // Si alguna de las condiciones falla, ignorar completamente la solicitud
             }
 
             // El impulso de salto ahora se aplica en FixedUpdateNetwork cuando el timer expira
