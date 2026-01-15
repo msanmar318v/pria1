@@ -2,6 +2,7 @@
 using Fusion;
 using Fusion.Addons.SimpleKCC;
 using UnityEngine.Rendering;
+using UnityEngine.Events;
 
 namespace Starter.Shooter
 {
@@ -46,6 +47,20 @@ namespace Starter.Shooter
         public GameObject ImpactPrefab;
         public ParticleSystem MuzzleParticle;
 
+        [Header("Ammo Setup")]
+        [Tooltip("Munición máxima del cargador")]
+        public int MaxAmmoPerClip = 6;
+        
+        [Tooltip("Tiempo mínimo entre disparos en segundos")]
+        public float FireRate = 0.1f;
+        
+        [Tooltip("Tiempo de recarga en segundos")]
+        public float ReloadTime = 3f;
+
+        [Header("Ammo Events")]
+        [Tooltip("Evento que se dispara cuando cambia la munición (parámetro: currentAmmo)")]
+        public UnityEvent<int> OnAmmoChanged;
+
         [Header("Animation Setup")]
         public Transform ChestTargetPosition;
         public Transform ChestBone; // Ultimo Spine del jugador
@@ -80,6 +95,7 @@ namespace Starter.Shooter
         public AudioSource FootstepSound;
         public AudioClip JumpAudioClip;
         public AudioClip LandAudioClip;
+        public AudioClip ReloadAudioClip;
 
         [Header("VFX")]
         public ParticleSystem DustParticles;
@@ -88,6 +104,12 @@ namespace Starter.Shooter
         public string Nickname { get; set; }
         [Networked, HideInInspector]
         public int ChickenKills { get; set; }
+
+        // Ammo System - Networked Variables
+        [Networked, HideInInspector, OnChangedRender(nameof(OnCurrentAmmoChangedCallback))]
+        public int CurrentAmmo { get; set; }
+        [Networked, HideInInspector]
+        public NetworkBool IsReloading { get; set; }
 
         [Networked]
         private Vector3 _moveVelocity { get; set; }
@@ -105,6 +127,10 @@ namespace Starter.Shooter
         private NetworkBool _isPlayingJumpAnimation { get; set; }
         [Networked]
         private NetworkBool _jumpRequested { get; set; }
+        [Networked]
+        private TickTimer _fireRateTimer { get; set; }
+        [Networked]
+        private TickTimer _reloadTimer { get; set; }
 
         // Animation IDs
         private int _animIDSpeedX;
@@ -126,6 +152,9 @@ namespace Starter.Shooter
         // Variables para prevenir el bug de rotación infinita durante respawn
         private bool _isRespawning;
         private int _respawnFrameCounter;
+
+        // Audio
+        private AudioSource _reloadAudioSource;
 
         public void Respawn(Vector3 position)
         {
@@ -153,6 +182,15 @@ namespace Starter.Shooter
             _jumpRequested = false;
             _previousKCCPosition = position;
             _filteredHeadOffset = Vector3.zero;
+            
+            // Resetear sistema de munición
+            CurrentAmmo = MaxAmmoPerClip;
+            IsReloading = false;
+            _fireRateTimer = TickTimer.None;
+            _reloadTimer = TickTimer.None;
+            
+            // Resetear todos los elementos del HUD
+            ResetHUDElements();
             
             // Activar el flag de respawn para prevenir actualizaciones de IK
             _isRespawning = true;
@@ -183,6 +221,28 @@ namespace Starter.Shooter
             }
         }
 
+        /// <summary>
+        /// Resetea todos los elementos del HUD para sincronizarlos con el estado del jugador.
+        /// Se llama durante el respawn para prevenir desincronizaciones.
+        /// </summary>
+        private void ResetHUDElements()
+        {
+            // Solo ejecutar para el jugador local
+            if (!HasInputAuthority)
+                return;
+
+            // Resetear munición en el HUD
+            // Forzar la invocación del evento para actualizar la UI inmediatamente
+            OnAmmoChanged?.Invoke(MaxAmmoPerClip);
+            
+            Debug.Log($"[Player] HUD reseteado - Munición: {MaxAmmoPerClip}");
+            
+            // TODO: Añadir aquí futuros elementos del HUD cuando se implementen:
+            // - Vida: OnHealthChanged?.Invoke(Health.InitialHealth, Health.InitialHealth);
+            // - Kills: OnKillsChanged?.Invoke(0);
+            // - Otros elementos del HUD...
+        }
+
         private void ResetSpineRotations()
         {
             // Capturar y resetear las rotaciones neutrales de los huesos
@@ -207,6 +267,13 @@ namespace Starter.Shooter
 
         public override void Spawned()
         {
+            if (HasStateAuthority)
+            {
+                // Inicializar munición al máximo
+                CurrentAmmo = MaxAmmoPerClip;
+                IsReloading = false;
+            }
+
             if (HasInputAuthority)
             {
                 RPC_SetNickname(PlayerPrefs.GetString("PlayerName"));
@@ -249,6 +316,17 @@ namespace Starter.Shooter
             _previousKCCPosition = KCC.Position;
             _isRespawning = false;
             _respawnFrameCounter = 0;
+
+            // Crear AudioSource para el sonido de recarga
+            if (ReloadAudioClip != null)
+            {
+                _reloadAudioSource = gameObject.AddComponent<AudioSource>();
+                _reloadAudioSource.clip = ReloadAudioClip;
+                _reloadAudioSource.playOnAwake = false;
+                _reloadAudioSource.spatialBlend = 1f; // 3D sound
+                _reloadAudioSource.minDistance = 1f;
+                _reloadAudioSource.maxDistance = 20f;
+            }
         }
 
         public override void FixedUpdateNetwork()
@@ -262,6 +340,27 @@ namespace Starter.Shooter
             {
                 MovePlayer(Vector3.zero, 0f);
             }
+
+            // Gestión de sistema de recarga
+            if (IsReloading)
+            {
+                if (_reloadTimer.Expired(Runner))
+                {
+                    // Recarga completada
+                    CurrentAmmo = MaxAmmoPerClip;
+                    IsReloading = false;
+                    _reloadTimer = TickTimer.None;
+                }
+            }
+            else
+            {
+                // Verificar si necesita recargar automáticamente
+                if (CurrentAmmo <= 0 && !_reloadTimer.IsRunning)
+                {
+                    StartReload();
+                }
+            }
+
             if (_jumpRequested && KCC.IsGrounded && !_jumpTimer.IsRunning)
             {
                 _jumpRequested = false;
@@ -547,7 +646,7 @@ namespace Starter.Shooter
 
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Fire))
             {
-                Fire();
+                TryFire();
             }
         }
 
@@ -568,6 +667,51 @@ namespace Starter.Shooter
             _moveVelocity = Vector3.Lerp(_moveVelocity, desiredMoveVelocity, acceleration * Runner.DeltaTime);
 
             KCC.Move(_moveVelocity, jumpImpulse);
+        }
+
+        private void TryFire()
+        {
+            // Verificar si puede disparar
+            if (IsReloading)
+            {
+                Debug.Log("[Player] No se puede disparar mientras se recarga");
+                return;
+            }
+
+            if (CurrentAmmo <= 0)
+            {
+                Debug.Log("[Player] Sin munición, iniciando recarga automática");
+                return; // La recarga automática se maneja en FixedUpdateNetwork
+            }
+
+            if (_fireRateTimer.IsRunning && !_fireRateTimer.Expired(Runner))
+            {
+                Debug.Log("[Player] Debe esperar entre disparos (Fire Rate)");
+                return;
+            }
+
+            // Disparar
+            Fire();
+            
+            // Decrementar munición
+            CurrentAmmo--;
+            
+            // Establecer cooldown de disparo
+            _fireRateTimer = TickTimer.CreateFromSeconds(Runner, FireRate);
+        }
+
+        private void StartReload()
+        {
+            IsReloading = true;
+            _reloadTimer = TickTimer.CreateFromSeconds(Runner, ReloadTime);
+            
+            // Reproducir sonido de recarga (solo en el cliente local)
+            if (HasInputAuthority && _reloadAudioSource != null && ReloadAudioClip != null)
+            {
+                _reloadAudioSource.PlayOneShot(ReloadAudioClip);
+            }
+            
+            Debug.Log($"[Player] Iniciando recarga - Duración: {ReloadTime}s");
         }
 
         private void Fire()
@@ -607,6 +751,18 @@ namespace Starter.Shooter
             }
 
             _visibleFireCount = _fireCount;
+        }
+
+        private void OnCurrentAmmoChangedCallback()
+        {
+            // Este método se ejecuta cuando CurrentAmmo cambia (NetworkBehaviour callback)
+            Debug.Log($"[Player] Munición actualizada: {CurrentAmmo}/{MaxAmmoPerClip}");
+            
+            // Disparar el UnityEvent solo para el jugador local
+            if (HasInputAuthority)
+            {
+                OnAmmoChanged?.Invoke(CurrentAmmo);
+            }
         }
 
         private void AssignAnimationIDs()

@@ -329,6 +329,12 @@ MonoBehaviour:
     m_Bits: 1
   ImpactPrefab: {fileID: 921809749201012083, guid: 7b3d9616a600e0a408561256ba1be9d9, type: 3}
   MuzzleParticle: {fileID: 2310922988817635306}
+  MaxAmmoPerClip: 6
+  FireRate: 0.2
+  ReloadTime: 3
+  OnAmmoChanged:
+    m_PersistentCalls:
+      m_Calls: []
   ChestTargetPosition: {fileID: 536988984119202717}
   ChestBone: {fileID: 7048695685947523147}
   SpineBones:
@@ -344,13 +350,18 @@ MonoBehaviour:
   VerticalMovementThreshold: 0.02
   HorizontalDampingStrength: 0.1
   OscillationSmoothSpeed: 20
+  RespawnSafetyFrames: 3
   FireSound: {fileID: 3515788271502590058}
   FootstepSound: {fileID: 7822257894759364770}
   JumpAudioClip: {fileID: 8300000, guid: 111193ad93ba31640ba3bdc4695615fa, type: 3}
   LandAudioClip: {fileID: 8300000, guid: 5d389baa695e70746b0c2ad612c4bb81, type: 3}
+  ReloadAudioClip: {fileID: 8300000, guid: 6889437546efc0542b3d423000174660, type: 3}
   DustParticles: {fileID: 4917586891687763835}
   _Nickname: 
   _ChickenKills: 0
+  _CurrentAmmo: 0
+  _IsReloading:
+    _value: 0
 --- !u!114 &7362189930313428062
 MonoBehaviour:
   m_ObjectHideFlags: 0

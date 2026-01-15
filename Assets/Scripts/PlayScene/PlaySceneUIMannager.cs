@@ -3,8 +3,10 @@ using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Starter;
+using Starter.Shooter;
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 
 public class PlaySceneUIMannager : MonoBehaviour
 {
@@ -41,8 +43,47 @@ public class PlaySceneUIMannager : MonoBehaviour
     [Tooltip("Duración de la animación en segundos")]
     public float hoverAnimationDuration = 0.1f;
 
+    [Header("HUD - Health")]
+    [Tooltip("Icono de vida del jugador")]
+    public Image healthIcon;
+    
+    [Tooltip("Texto que muestra la vida actual")]
+    public TextMeshProUGUI healthText;
+
+    [Header("HUD - Ammo")]
+    [Tooltip("Imagen del cargador (se cambiará el sprite según las balas)")]
+    public Image ammoImage;
+    
+    [Tooltip("Array de sprites del cargador (índice 0 = 0 balas, índice 6 = 6 balas)")]
+    public Sprite[] ammoSprites = new Sprite[7];
+    
+    [Tooltip("Texto que muestra las balas actuales")]
+    public TextMeshProUGUI ammoText;
+
+    [Header("HUD - Local Kills")]
+    [Tooltip("Imagen/icono de kills locales")]
+    public Image localKillsIcon;
+    
+    [Tooltip("Texto que muestra las kills totales del jugador")]
+    public TextMeshProUGUI localKillsText;
+
+    [Header("HUD - Best Player")]
+    [Tooltip("Imagen/icono del mejor jugador")]
+    public Image bestPlayerIcon;
+    
+    [Tooltip("Texto que muestra el nombre del mejor jugador")]
+    public TextMeshProUGUI bestPlayerNameText;
+    
+    [Tooltip("Texto que muestra las kills del mejor jugador")]
+    public TextMeshProUGUI bestPlayerKillsText;
+
+    [Header("Game References")]
+    [Tooltip("Referencia al GameManager (se buscará automáticamente si no se asigna)")]
+    public GameManager gameManager;
+
     private Dictionary<RectTransform, Coroutine> activeAnimations = new Dictionary<RectTransform, Coroutine>();
     private Dictionary<RectTransform, bool> isHovering = new Dictionary<RectTransform, bool>();
+    private bool _isSubscribed = false;
 
     private void Start()
     {
@@ -53,7 +94,108 @@ public class PlaySceneUIMannager : MonoBehaviour
                 AddHoverAnimation(buttonSettings);
             }
         }
+
+        // Buscar GameManager si no está asignado
+        if (gameManager == null)
+        {
+            gameManager = FindObjectOfType<GameManager>();
+        }
     }
+
+    private void Update()
+    {
+        // Suscribirse a los eventos del jugador local cuando esté disponible
+        if (gameManager != null && gameManager.LocalPlayer != null && 
+            gameManager.LocalPlayer.HasInputAuthority && !_isSubscribed)
+        {
+            SubscribeToPlayerEvents(gameManager.LocalPlayer);
+            _isSubscribed = true;
+        }
+    }
+
+    #region HUD Update Methods
+
+    /// <summary>
+    /// Suscribe el UI Manager a los eventos del jugador local
+    /// </summary>
+    private void SubscribeToPlayerEvents(Player player)
+    {
+        // Suscribirse al evento de munición
+        player.OnAmmoChanged.AddListener(OnAmmoChanged);
+        
+        // Inicializar la UI con los valores actuales
+        OnAmmoChanged(player.CurrentAmmo);
+        
+        // TODO: Suscribirse a otros eventos cuando se implementen
+        // player.Health.OnHealthChanged += OnHealthChanged;
+        // player.OnKillsChanged += OnKillsChanged;
+        // gameManager.OnBestHunterChanged += OnBestHunterChanged;
+        
+        Debug.Log("[PlaySceneUIManager] Suscrito a eventos del jugador local");
+    }
+
+    /// <summary>
+    /// Actualiza la visualización de la vida del jugador
+    /// </summary>
+    /// <param name="currentHealth">Vida actual</param>
+    /// <param name="maxHealth">Vida máxima</param>
+    public void OnHealthChanged(int currentHealth, int maxHealth)
+    {
+        // TODO: Implementar actualización de vida
+        // - Actualizar healthText.text con formato "currentHealth / maxHealth"
+        // - Cambiar color del icono o texto si la vida es baja
+        // - Opcional: animación de daño recibido
+    }
+
+    /// <summary>
+    /// Actualiza la visualización de munición del jugador
+    /// </summary>
+    /// <param name="currentAmmo">Balas actuales en el cargador</param>
+    public void OnAmmoChanged(int currentAmmo)
+    {
+        // Actualizar el sprite del cargador
+        if (ammoImage != null && ammoSprites != null && ammoSprites.Length == 7)
+        {
+            int spriteIndex = Mathf.Clamp(currentAmmo, 0, 6);
+            ammoImage.sprite = ammoSprites[spriteIndex];
+        }
+        
+        // Actualizar el texto de munición
+        if (ammoText != null)
+        {
+            ammoText.text = currentAmmo.ToString();
+        }
+        
+        Debug.Log($"[PlaySceneUIManager] HUD actualizado - Munición: {currentAmmo}");
+    }
+
+    /// <summary>
+    /// Actualiza el contador de kills locales del jugador
+    /// </summary>
+    /// <param name="kills">Número de kills</param>
+    public void OnKillsChanged(int kills)
+    {
+        // TODO: Implementar actualización de kills locales
+        // - Actualizar localKillsText.text con el valor de kills
+        // - Opcional: animación de incremento
+    }
+
+    /// <summary>
+    /// Actualiza la información del mejor jugador
+    /// </summary>
+    /// <param name="playerName">Nombre del mejor jugador</param>
+    /// <param name="kills">Kills del mejor jugador</param>
+    public void OnBestHunterChanged(string playerName, int kills)
+    {
+        // TODO: Implementar actualización del mejor jugador
+        // - Actualizar bestPlayerNameText.text con playerName
+        // - Actualizar bestPlayerKillsText.text con kills
+        // - Opcional: resaltar si el mejor jugador eres tú
+    }
+
+    #endregion
+
+    #region Hover Animation Methods
 
     private void AddHoverAnimation(ButtonHoverSettings settings)
     {
@@ -187,6 +329,8 @@ public class PlaySceneUIMannager : MonoBehaviour
         rectTransform.anchoredPosition = targetPosition;
     }
 
+    #endregion
+
     public async void GoBack()
     {
         var uiGameMenu = FindObjectOfType<UIGameMenu>();
@@ -201,5 +345,19 @@ public class PlaySceneUIMannager : MonoBehaviour
         }
         
         SceneManager.LoadScene("MainMenuScene");
+    }
+
+    private void OnDestroy()
+    {
+        // Desuscribirse de eventos al destruir
+        if (_isSubscribed && gameManager != null && gameManager.LocalPlayer != null)
+        {
+            gameManager.LocalPlayer.OnAmmoChanged.RemoveListener(OnAmmoChanged);
+            
+            // TODO: Desuscribirse de otros eventos cuando se implementen
+            // gameManager.LocalPlayer.Health.OnHealthChanged -= OnHealthChanged;
+            // gameManager.LocalPlayer.OnKillsChanged -= OnKillsChanged;
+            // gameManager.OnBestHunterChanged -= OnBestHunterChanged;
+        }
     }
 }
