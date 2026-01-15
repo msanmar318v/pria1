@@ -89,6 +89,10 @@ public class PlaySceneUIMannager : MonoBehaviour
     [Tooltip("Texto que muestra las kills del mejor jugador")]
     public TextMeshProUGUI bestPlayerKillsText;
 
+    [Header("HUD - Best Player Container")]
+    [Tooltip("GameObject contenedor de todos los elementos del mejor jugador (se activará/desactivará)")]
+    public GameObject bestPlayerContainer;
+
     [Header("Game References")]
     [Tooltip("Referencia al GameManager (se buscará automáticamente si no se asigna)")]
     public GameManager gameManager;
@@ -115,6 +119,9 @@ public class PlaySceneUIMannager : MonoBehaviour
         
         // Configurar los alphas iniciales de las imágenes de vida
         InitializeHealthIcons();
+        
+        // Ocultar el contenedor del mejor jugador al inicio
+        HideBestPlayerUI();
     }
 
     private void Update()
@@ -124,6 +131,7 @@ public class PlaySceneUIMannager : MonoBehaviour
             gameManager.LocalPlayer.HasInputAuthority && !_isSubscribed)
         {
             SubscribeToPlayerEvents(gameManager.LocalPlayer);
+            SubscribeToGameManagerEvents();
             _isSubscribed = true;
         }
     }
@@ -193,6 +201,18 @@ public class PlaySceneUIMannager : MonoBehaviour
         // gameManager.OnBestHunterChanged += OnBestHunterChanged;
         
         Debug.Log("[PlaySceneUIManager] Suscrito a eventos del jugador local");
+    }
+
+    /// <summary>
+    /// Suscribe el UI Manager a los eventos del GameManager
+    /// </summary>
+    private void SubscribeToGameManagerEvents()
+    {
+        if (gameManager != null)
+        {
+            gameManager.OnBestHunterChanged += OnBestHunterChanged;
+            Debug.Log("[PlaySceneUIManager] Suscrito a eventos del GameManager");
+        }
     }
 
     /// <summary>
@@ -284,14 +304,87 @@ public class PlaySceneUIMannager : MonoBehaviour
     /// <summary>
     /// Actualiza la información del mejor jugador
     /// </summary>
-    /// <param name="playerName">Nombre del mejor jugador</param>
+    /// <param name="playerName">Nombre del mejor jugador (vacío si no hay)</param>
     /// <param name="kills">Kills del mejor jugador</param>
     public void OnBestHunterChanged(string playerName, int kills)
     {
-        // TODO: Implementar actualización del mejor jugador
-        // - Actualizar bestPlayerNameText.text con playerName
-        // - Actualizar bestPlayerKillsText.text con kills
-        // - Opcional: resaltar si el mejor jugador eres tú
+        // Si no hay nombre o kills es 0, ocultar el UI
+        if (string.IsNullOrEmpty(playerName) || kills <= 0)
+        {
+            HideBestPlayerUI();
+            Debug.Log("[PlaySceneUIManager] Mejor jugador oculto (sin kills)");
+            return;
+        }
+
+        // Hay un mejor jugador, mostrar el UI
+        ShowBestPlayerUI();
+
+        // Actualizar el nombre del mejor jugador
+        if (bestPlayerNameText != null)
+        {
+            bestPlayerNameText.text = playerName;
+        }
+
+        // Actualizar las kills del mejor jugador con formato de dos dígitos
+        if (bestPlayerKillsText != null)
+        {
+            bestPlayerKillsText.text = kills.ToString("D2");
+        }
+
+        Debug.Log($"[PlaySceneUIManager] Mejor jugador mostrado: {playerName} ({kills:D2} kills)");
+
+        // Opcional: Resaltar si el mejor jugador eres tú
+        if (gameManager != null && gameManager.LocalPlayer != null && 
+            gameManager.LocalPlayer.Nickname == playerName)
+        {
+            // Cambiar color a dorado/amarillo para indicar que eres tú
+            if (bestPlayerNameText != null)
+            {
+                bestPlayerNameText.color = Color.yellow;
+            }
+            Debug.Log("[PlaySceneUIManager] ¡Eres el mejor jugador!");
+        }
+        else
+        {
+            // Color normal (blanco) si es otro jugador
+            if (bestPlayerNameText != null)
+            {
+                bestPlayerNameText.color = Color.white;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Muestra el UI del mejor jugador
+    /// </summary>
+    private void ShowBestPlayerUI()
+    {
+        if (bestPlayerContainer != null)
+        {
+            bestPlayerContainer.SetActive(true);
+        }
+    }
+
+    /// <summary>
+    /// Oculta el UI del mejor jugador
+    /// </summary>
+    private void HideBestPlayerUI()
+    {
+        if (bestPlayerContainer != null)
+        {
+            bestPlayerContainer.SetActive(false);
+        }
+
+        // Limpiar los textos por si acaso
+        if (bestPlayerNameText != null)
+        {
+            bestPlayerNameText.text = string.Empty;
+        }
+
+        if (bestPlayerKillsText != null)
+        {
+            bestPlayerKillsText.text = "00";
+        }
     }
 
     #endregion
@@ -461,8 +554,11 @@ public class PlaySceneUIMannager : MonoBehaviour
                 gameManager.LocalPlayer.Health.OnHealthChanged.RemoveListener(OnHealthChanged);
             }
             
-            // TODO: Desuscribirse de otros eventos cuando se implementen
-            // gameManager.OnBestHunterChanged -= OnBestHunterChanged;
+            // Desuscribirse del GameManager
+            if (gameManager != null)
+            {
+                gameManager.OnBestHunterChanged -= OnBestHunterChanged;
+            }
         }
     }
 }

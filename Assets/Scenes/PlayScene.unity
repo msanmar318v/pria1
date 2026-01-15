@@ -1658,6 +1658,7 @@ MonoBehaviour:
   bestPlayerIcon: {fileID: 2031780625}
   bestPlayerNameText: {fileID: 1261676850}
   bestPlayerKillsText: {fileID: 1860075611}
+  bestPlayerContainer: {fileID: 1989295159}
   gameManager: {fileID: 256330883}
 --- !u!1 &191472946
 GameObject:
