@@ -62,6 +62,14 @@ namespace Starter.Shooter
         [Tooltip("Evento que se dispara cuando el jugador consigue una kill")]
         public UnityEvent<int> OnPlayerKillsChanged;
 
+        [Header("Dash Setup")]
+        [Tooltip("Velocidad del dash")]
+        public float DashSpeed = 10f;
+        [Tooltip("Duración del dash en segundos")]
+        public float DashDuration = 0.25f;
+        [Tooltip("Tiempo de cooldown entre dashes en segundos")]
+        public float DashCooldown = 1.0f;
+
         [Header("Animation Setup")]
         public Transform ChestTargetPosition;
         public Transform ChestBone;
@@ -133,6 +141,14 @@ namespace Starter.Shooter
         private TickTimer _fireRateTimer { get; set; }
         [Networked]
         private TickTimer _reloadTimer { get; set; }
+        
+        // DASH: Variables de red para el dash
+        [Networked]
+        private float _dashTimer { get; set; }
+        [Networked]
+        private float _dashCooldownTimer { get; set; }
+        [Networked]
+        private NetworkBool _isInvulnerable { get; set; }
 
         private int _animIDSpeedX;
         private int _animIDSpeedZ;
@@ -178,6 +194,11 @@ namespace Starter.Shooter
             IsReloading = false;
             _fireRateTimer = TickTimer.None;
             _reloadTimer = TickTimer.None;
+            
+            // DASH: Resetear variables del dash
+            _dashTimer = 0f;
+            _dashCooldownTimer = 0f;
+            _isInvulnerable = false;
             
             ResetHUDElements();
             
@@ -246,6 +267,11 @@ namespace Starter.Shooter
                 CurrentAmmo = MaxAmmoPerClip;
                 IsReloading = false;
                 PlayerKills = 0;
+                
+                // DASH: Inicializar variables del dash
+                _dashTimer = 0f;
+                _dashCooldownTimer = 0f;
+                _isInvulnerable = false;
             }
 
             if (HasInputAuthority)
@@ -304,6 +330,29 @@ namespace Starter.Shooter
 
         public override void FixedUpdateNetwork()
         {
+            // DASH: Actualizar timers del dash
+            if (_dashTimer > 0f)
+            {
+                _dashTimer -= Runner.DeltaTime;
+                if (_dashTimer <= 0f)
+                {
+                    _dashTimer = 0f;
+                    _isInvulnerable = false;
+                    
+                    if (Health != null)
+                    {
+                        Health.IsInvulnerable = false;
+                    }
+                }
+            }
+
+            if (_dashCooldownTimer > 0f)
+            {
+                _dashCooldownTimer -= Runner.DeltaTime;
+                if (_dashCooldownTimer < 0f)
+                    _dashCooldownTimer = 0f;
+            }
+
             if (Health.IsAlive && Health.CurrentHealth > 0 && GetInput<GameplayInput>(out var input))
             {
                 ProcessInput(input, Input.PreviousButtons);
@@ -580,6 +629,12 @@ namespace Starter.Shooter
                 }
             }
 
+            // DASH: Detectar input del dash
+            if (input.Buttons.WasPressed(previousButtons, EInputButton.Dash))
+            {
+                TryStartDash(moveDirection);
+            }
+
             MovePlayer(desiredMoveVelocity, 0f);
 
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Fire))
@@ -591,6 +646,13 @@ namespace Starter.Shooter
         private void MovePlayer(Vector3 desiredMoveVelocity, float jumpImpulse)
         {
             KCC.SetGravity(KCC.RealVelocity.y >= 0f ? UpGravity : DownGravity);
+
+            // DASH: Si estamos en dash, mantener la velocidad del dash
+            if (_dashTimer > 0f)
+            {
+                KCC.Move(_moveVelocity, jumpImpulse: 0f);
+                return;
+            }
 
             float acceleration;
             if (desiredMoveVelocity == Vector3.zero)
@@ -605,6 +667,36 @@ namespace Starter.Shooter
             _moveVelocity = Vector3.Lerp(_moveVelocity, desiredMoveVelocity, acceleration * Runner.DeltaTime);
 
             KCC.Move(_moveVelocity, jumpImpulse);
+        }
+
+        // DASH: Método para iniciar el dash
+        private void TryStartDash(Vector3 moveDirection)
+        {
+            // No puedes hacer dash si estás ya dashing, en cooldown o muerto
+            if (_dashTimer > 0f || _dashCooldownTimer > 0f || Health.IsAlive == false)
+                return;
+
+            // Si no hay dirección de movimiento, dashear hacia adelante
+            if (moveDirection.sqrMagnitude < 0.01f)
+            {
+                moveDirection = KCC.TransformRotation * Vector3.forward;
+            }
+
+            moveDirection.Normalize();
+
+            // Activar dash
+            _dashTimer = DashDuration;
+            _dashCooldownTimer = DashCooldown + DashDuration;
+            _isInvulnerable = true;
+            
+            // Sincronizar invulnerabilidad con Health
+            if (Health != null)
+            {
+                Health.IsInvulnerable = true;
+            }
+
+            // Aplicar velocidad de dash
+            _moveVelocity = moveDirection * DashSpeed;
         }
 
         private void TryFire()
