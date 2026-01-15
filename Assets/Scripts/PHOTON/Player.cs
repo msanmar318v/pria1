@@ -235,10 +235,16 @@ namespace Starter.Shooter
             // Forzar la invocación del evento para actualizar la UI inmediatamente
             OnAmmoChanged?.Invoke(MaxAmmoPerClip);
             
-            Debug.Log($"[Player] HUD reseteado - Munición: {MaxAmmoPerClip}");
+            // Resetear vida en el HUD
+            if (Health != null)
+            {
+                int healthPercentage = Health.GetHealthPercentage();
+                Health.OnHealthChanged?.Invoke(Health.CurrentHealth, Health.InitialHealth, healthPercentage);
+            }
+            
+            Debug.Log($"[Player] HUD reseteado - Munición: {MaxAmmoPerClip}, Vida: {Health.CurrentHealth}/{Health.InitialHealth}");
             
             // TODO: Añadir aquí futuros elementos del HUD cuando se implementen:
-            // - Vida: OnHealthChanged?.Invoke(Health.InitialHealth, Health.InitialHealth);
             // - Kills: OnKillsChanged?.Invoke(0);
             // - Otros elementos del HUD...
         }

@@ -1,5 +1,6 @@
 ﻿using Fusion;
 using UnityEngine;
+using UnityEngine.Events;
 using System.Collections.Generic;
 
 namespace Starter.Shooter
@@ -26,10 +27,14 @@ namespace Starter.Shooter
 		[Tooltip("Duración del efecto de tinte en segundos")]
 		public float HitTintDuration = 0.3f;
 
+		[Header("Health Events")]
+		[Tooltip("Evento que se dispara cuando cambia la vida (parámetros: currentHealth, maxHealth, healthPercentage)")]
+		public UnityEvent<int, int, int> OnHealthChanged;
+
 		public bool IsAlive => CurrentHealth > 0;
 		public bool IsFinished => IsAlive == false && _deathCooldown.Expired(Runner);
 
-		[Networked, HideInInspector, OnChangedRender(nameof(OnCurrentHealthChanged))]
+		[Networked, HideInInspector, OnChangedRender(nameof(OnCurrentHealthChangedCallback))]
 		public int CurrentHealth { get; set; }
 
 		[Networked]
@@ -221,10 +226,37 @@ namespace Starter.Shooter
 			ApplyTint(HitTintColor);
 		}
 
-		private void OnCurrentHealthChanged()
+		/// <summary>
+		/// Calcula el porcentaje de vida sin decimales
+		/// </summary>
+		/// <returns>Porcentaje de vida redondeado (0-100)</returns>
+		public int GetHealthPercentage()
 		{
+			if (InitialHealth <= 0)
+				return 0;
+			
+			// Calcular porcentaje y redondear al entero más cercano
+			float percentage = ((float)CurrentHealth / (float)InitialHealth) * 100f;
+			return Mathf.RoundToInt(percentage);
+		}
+
+		private void OnCurrentHealthChangedCallback()
+		{
+			// Disparar evento de cambio de vida SIEMPRE (incluso cuando muere)
+			if (HasInputAuthority)
+			{
+				int healthPercentage = GetHealthPercentage();
+				OnHealthChanged?.Invoke(CurrentHealth, InitialHealth, healthPercentage);
+				
+				Debug.Log($"[Health] Vida actualizada: {CurrentHealth}/{InitialHealth} ({healthPercentage}%)");
+			}
+
+			// Aplicar efectos visuales (escalado y tinte) solo si sigue vivo
 			if (CurrentHealth <= 0)
-				return; // Just health reset
+			{
+				// El jugador ha muerto, no aplicar efectos visuales
+				return;
+			}
 
 			if (HasInputAuthority == false && ScalingRoot != null)
 			{

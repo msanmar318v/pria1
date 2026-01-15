@@ -44,11 +44,23 @@ public class PlaySceneUIMannager : MonoBehaviour
     public float hoverAnimationDuration = 0.1f;
 
     [Header("HUD - Health")]
-    [Tooltip("Icono de vida del jugador")]
+    [Tooltip("Imagen de fondo de vida (alpha reducido, siempre visible)")]
+    public Image healthBackgroundIcon;
+    
+    [Tooltip("Imagen principal de vida (alpha completo, se consume según la vida actual)")]
     public Image healthIcon;
     
     [Tooltip("Texto que muestra la vida actual")]
     public TextMeshProUGUI healthText;
+    
+    [Header("Health Visual Settings")]
+    [Tooltip("Alpha de la imagen de fondo (vida perdida) - valor entre 0 y 1")]
+    [Range(0f, 1f)]
+    public float healthBackgroundAlpha = 0.4f;
+    
+    [Tooltip("Alpha de la imagen principal (vida actual) - valor entre 0 y 1")]
+    [Range(0f, 1f)]
+    public float healthForegroundAlpha = 1f;
 
     [Header("HUD - Ammo")]
     [Tooltip("Imagen del cargador (se cambiará el sprite según las balas)")]
@@ -100,6 +112,9 @@ public class PlaySceneUIMannager : MonoBehaviour
         {
             gameManager = FindObjectOfType<GameManager>();
         }
+        
+        // Configurar los alphas iniciales de las imágenes de vida
+        InitializeHealthIcons();
     }
 
     private void Update()
@@ -116,6 +131,40 @@ public class PlaySceneUIMannager : MonoBehaviour
     #region HUD Update Methods
 
     /// <summary>
+    /// Inicializa las imágenes de vida con los alphas correctos
+    /// </summary>
+    private void InitializeHealthIcons()
+    {
+        // Configurar imagen de fondo (siempre visible con alpha reducido)
+        if (healthBackgroundIcon != null)
+        {
+            Color bgColor = healthBackgroundIcon.color;
+            bgColor.a = healthBackgroundAlpha;
+            healthBackgroundIcon.color = bgColor;
+            
+            // Asegurarse de que esté configurada como Filled
+            healthBackgroundIcon.type = Image.Type.Filled;
+            healthBackgroundIcon.fillMethod = Image.FillMethod.Vertical;
+            healthBackgroundIcon.fillOrigin = (int)Image.OriginVertical.Top;
+            healthBackgroundIcon.fillAmount = 1f; // Siempre al 100%
+        }
+        
+        // Configurar imagen principal (se consume según la vida)
+        if (healthIcon != null)
+        {
+            Color fgColor = healthIcon.color;
+            fgColor.a = healthForegroundAlpha;
+            healthIcon.color = fgColor;
+            
+            // Asegurarse de que esté configurada como Filled
+            healthIcon.type = Image.Type.Filled;
+            healthIcon.fillMethod = Image.FillMethod.Vertical;
+            healthIcon.fillOrigin = (int)Image.OriginVertical.Top;
+            healthIcon.fillAmount = 1f; // Empieza al 100%
+        }
+    }
+
+    /// <summary>
     /// Suscribe el UI Manager a los eventos del jugador local
     /// </summary>
     private void SubscribeToPlayerEvents(Player player)
@@ -123,11 +172,20 @@ public class PlaySceneUIMannager : MonoBehaviour
         // Suscribirse al evento de munición
         player.OnAmmoChanged.AddListener(OnAmmoChanged);
         
-        // Inicializar la UI con los valores actuales
+        // Suscribirse al evento de vida
+        if (player.Health != null)
+        {
+            player.Health.OnHealthChanged.AddListener(OnHealthChanged);
+            
+            // Inicializar la UI de vida con los valores actuales
+            int healthPercentage = player.Health.GetHealthPercentage();
+            OnHealthChanged(player.Health.CurrentHealth, player.Health.InitialHealth, healthPercentage);
+        }
+        
+        // Inicializar la UI de munición con los valores actuales
         OnAmmoChanged(player.CurrentAmmo);
         
         // TODO: Suscribirse a otros eventos cuando se implementen
-        // player.Health.OnHealthChanged += OnHealthChanged;
         // player.OnKillsChanged += OnKillsChanged;
         // gameManager.OnBestHunterChanged += OnBestHunterChanged;
         
@@ -139,12 +197,45 @@ public class PlaySceneUIMannager : MonoBehaviour
     /// </summary>
     /// <param name="currentHealth">Vida actual</param>
     /// <param name="maxHealth">Vida máxima</param>
-    public void OnHealthChanged(int currentHealth, int maxHealth)
+    /// <param name="healthPercentage">Porcentaje de vida (0-100)</param>
+    public void OnHealthChanged(int currentHealth, int maxHealth, int healthPercentage)
     {
-        // TODO: Implementar actualización de vida
-        // - Actualizar healthText.text con formato "currentHealth / maxHealth"
-        // - Cambiar color del icono o texto si la vida es baja
-        // - Opcional: animación de daño recibido
+        // Actualizar la imagen principal de vida (se consume de arriba a abajo)
+        if (healthIcon != null)
+        {
+            // fillAmount va de 0 (vacío) a 1 (lleno)
+            healthIcon.fillAmount = (float)healthPercentage / 100f;
+            
+            Debug.Log($"[PlaySceneUIManager] FillAmount actualizado: {healthIcon.fillAmount} ({healthPercentage}%)");
+        }
+        
+        // La imagen de fondo siempre permanece al 100% con alpha reducido
+        // No es necesario actualizarla, siempre muestra la vida "máxima" con transparencia
+        
+        // Actualizar el texto de vida (mostrar porcentaje sin decimales)
+        if (healthText != null)
+        {
+            healthText.text = $"{healthPercentage}%";
+        }
+        
+        Debug.Log($"[PlaySceneUIManager] HUD de vida actualizado - {currentHealth}/{maxHealth} ({healthPercentage}%)");
+        
+        // Cambiar color del texto según el porcentaje de vida
+        if (healthText != null)
+        {
+            if (healthPercentage <= 25)
+            {
+                healthText.color = Color.red; // Vida crítica
+            }
+            else if (healthPercentage <= 50)
+            {
+                healthText.color = Color.yellow; // Vida media
+            }
+            else
+            {
+                healthText.color = Color.white; // Vida normal
+            }
+        }
     }
 
     /// <summary>
@@ -354,8 +445,12 @@ public class PlaySceneUIMannager : MonoBehaviour
         {
             gameManager.LocalPlayer.OnAmmoChanged.RemoveListener(OnAmmoChanged);
             
+            if (gameManager.LocalPlayer.Health != null)
+            {
+                gameManager.LocalPlayer.Health.OnHealthChanged.RemoveListener(OnHealthChanged);
+            }
+            
             // TODO: Desuscribirse de otros eventos cuando se implementen
-            // gameManager.LocalPlayer.Health.OnHealthChanged -= OnHealthChanged;
             // gameManager.LocalPlayer.OnKillsChanged -= OnKillsChanged;
             // gameManager.OnBestHunterChanged -= OnBestHunterChanged;
         }
