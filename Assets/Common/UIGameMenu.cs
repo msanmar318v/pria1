@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Fusion;
+using Fusion.Photon.Realtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -45,10 +47,18 @@ namespace Starter
             var sceneInfo = new NetworkSceneInfo();
             sceneInfo.AddSceneRef(SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex));
 
-            // IMPORTANTE: Usa un nombre fijo o asegúrate que ambos clientes usen el mismo
             string sessionName = string.IsNullOrEmpty(RoomText.text) ? "DefaultRoom" : RoomText.text;
 
-            Debug.Log($"Intentando unirse/crear sesión: {sessionName}");
+            // DIAGNÓSTICO COMPLETO
+            var appSettings = PhotonAppSettings.Global.AppSettings;
+            Debug.Log("=== CONFIGURACIÓN DE CONEXIÓN ===");
+            Debug.Log($"SessionName: {sessionName}");
+            Debug.Log($"GameModeIdentifier: {GameModeIdentifier}");
+            Debug.Log($"App ID: {appSettings.AppIdFusion}");
+            Debug.Log($"App Version: {appSettings.AppVersion}");
+            Debug.Log($"Fixed Region: {appSettings.FixedRegion}");
+            Debug.Log($"Use Name Server: {appSettings.UseNameServer}");
+            Debug.Log("================================");
 
             var startArguments = new StartGameArgs()
             {
@@ -65,14 +75,19 @@ namespace Starter
 
             if (startTask.Result.Ok)
             {
-                Debug.Log($"Conectado correctamente. Es Host: {_runnerInstance.IsServer}");
+                Debug.Log($"✓ Conectado correctamente");
+                Debug.Log($"  - Es Host: {_runnerInstance.IsServer}");
+                Debug.Log($"  - Session Name: {_runnerInstance.SessionInfo.Name}");
+                Debug.Log($"  - Region: {_runnerInstance.SessionInfo.Region}");
+                Debug.Log($"  - Players: {_runnerInstance.SessionInfo.PlayerCount}/{MaxPlayerCount}");
+
                 StatusText.text = _runnerInstance.IsServer ? "Host de la partida" : "Conectado como cliente";
                 PanelGroup.gameObject.SetActive(false);
             }
             else
             {
                 StatusText.text = $"Error: {startTask.Result.ShutdownReason}";
-                Debug.LogError($"Error de conexión: {startTask.Result.ShutdownReason}");
+                Debug.LogError($"❌ Error de conexión: {startTask.Result.ShutdownReason}");
             }
         }
 
