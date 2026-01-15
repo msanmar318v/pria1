@@ -53,6 +53,12 @@ namespace Starter.Shooter
 			}
 		}
 
+		// Método público para resetear la rotación de la cámara
+		public void ResetLookRotation()
+		{
+			_input.LookRotation = Vector2.zero;
+		}
+
 		// BeforeUpdate is called during Unity's Update loop before any OnInput/FixedUpdateNetwork/Render functions are executed.
 		// Therefore using BeforeUpdate to accumulate input is slightly more precise than doing so in Update function as the latest input
 		// will be already used in FixedUpdateNetwork if it will be called in this update loop. This gets more important the lower render rate the player has.
@@ -71,7 +77,14 @@ namespace Starter.Shooter
 				return;
 			}
 
-			_input.LookRotation += new Vector2(-Input.GetAxisRaw("Mouse Y"), Input.GetAxisRaw("Mouse X"));
+			// CORRECCIÓN: 
+			// LookRotation.x = Yaw (horizontal, izquierda/derecha)
+			// LookRotation.y = Pitch (vertical, arriba/abajo)
+			// Vector2(x, y) por lo tanto debe ser (Mouse X, -Mouse Y)
+			_input.LookRotation += new Vector2(Input.GetAxisRaw("Mouse X"), -Input.GetAxisRaw("Mouse Y"));
+			
+			// Clampear solo el PITCH (componente Y) para evitar mirar más allá de arriba/abajo
+			_input.LookRotation.y = Mathf.Clamp(_input.LookRotation.y, -90f, 90f);
 
 			var moveDirection = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
 			_input.MoveDirection = moveDirection.normalized;

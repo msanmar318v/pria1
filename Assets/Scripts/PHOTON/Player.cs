@@ -126,7 +126,15 @@ namespace Starter.Shooter
 
             KCC.SetActive(true);
             KCC.SetPosition(position);
+            
+            // Resetear completamente la rotación del KCC (mirar hacia adelante horizontal)
             KCC.SetLookRotation(0f, 0f);
+            
+            // Si tiene autoridad de input, resetear el Input también
+            if (HasInputAuthority && Input != null)
+            {
+                Input.ResetLookRotation();
+            }
 
             _moveVelocity = Vector3.zero;
             _jumpTimer = TickTimer.None;
@@ -134,6 +142,48 @@ namespace Starter.Shooter
             _jumpRequested = false;
             _previousKCCPosition = position;
             _filteredHeadOffset = Vector3.zero;
+            
+            // Resetear las rotaciones de los huesos de la columna
+            ResetSpineRotations();
+            
+            // Resetear la rotación del CameraPivot inmediatamente
+            if (CameraPivot != null)
+            {
+                CameraPivot.rotation = Quaternion.identity;
+                
+                // Asegurar que CameraHandle también está resetado
+                if (CameraHandle != null)
+                {
+                    CameraHandle.localRotation = Quaternion.identity;
+                }
+            }
+            
+            // Resetear el parámetro de pitch del Animator
+            if (Animator != null)
+            {
+                Animator.SetFloat(_animIDPitch, 0f);
+            }
+        }
+
+        private void ResetSpineRotations()
+        {
+            // Forzar una actualización del Animator para obtener la pose neutral
+            if (Animator != null)
+            {
+                Animator.Update(0f);
+            }
+            
+            // Capturar las rotaciones neutrales después de la actualización
+            if (SpineBones != null && _spineAnimatorRotations != null)
+            {
+                for (int i = 0; i < SpineBones.Length; i++)
+                {
+                    if (SpineBones[i] != null)
+                    {
+                        _spineAnimatorRotations[i] = SpineBones[i].localRotation;
+                    }
+                }
+            }
         }
 
         public override void Spawned()
@@ -357,7 +407,11 @@ namespace Starter.Shooter
 
         private void ProcessInput(GameplayInput input, NetworkButtons previousButtons)
         {
-            KCC.SetLookRotation(input.LookRotation, -90f, 90f);
+            // CORRECCIÓN: Clampear solo el PITCH (Y) del input ANTES de procesarlo
+            Vector2 clampedLookRotation = input.LookRotation;
+            clampedLookRotation.y = Mathf.Clamp(clampedLookRotation.y, -90f, 90f);
+            
+            KCC.SetLookRotation(clampedLookRotation, -90f, 90f);
             var moveDirection = KCC.TransformRotation * new Vector3(input.MoveDirection.x, 0f, input.MoveDirection.y);
             var desiredMoveVelocity = moveDirection * WalkSpeed;
 
