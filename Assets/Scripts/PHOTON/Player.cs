@@ -71,6 +71,10 @@ namespace Starter.Shooter
         [Tooltip("Velocidad de suavizado solo para oscilaciones pequeñas")]
         public float OscillationSmoothSpeed = 20f;
 
+        [Header("Respawn Settings")]
+        [Tooltip("Frames a esperar después del respawn antes de reactivar IK de columna")]
+        public int RespawnSafetyFrames = 3;
+
         [Header("Sounds")]
         public AudioSource FireSound;
         public AudioSource FootstepSound;
@@ -119,6 +123,10 @@ namespace Starter.Shooter
         private Vector3 _previousKCCPosition;
         private Vector3 _filteredHeadOffset;
 
+        // Variables para prevenir el bug de rotación infinita durante respawn
+        private bool _isRespawning;
+        private int _respawnFrameCounter;
+
         public void Respawn(Vector3 position)
         {
             ChickenKills = 0;
@@ -126,6 +134,9 @@ namespace Starter.Shooter
 
             KCC.SetActive(true);
             KCC.SetPosition(position);
+            
+            // Resetear completamente la rotación del transform del jugador
+            transform.rotation = Quaternion.identity;
             
             // Resetear completamente la rotación del KCC (mirar hacia adelante horizontal)
             KCC.SetLookRotation(0f, 0f);
@@ -143,44 +154,52 @@ namespace Starter.Shooter
             _previousKCCPosition = position;
             _filteredHeadOffset = Vector3.zero;
             
-            // Resetear las rotaciones de los huesos de la columna
-            ResetSpineRotations();
+            // Activar el flag de respawn para prevenir actualizaciones de IK
+            _isRespawning = true;
+            _respawnFrameCounter = 0;
             
-            // Resetear la rotación del CameraPivot inmediatamente
-            if (CameraPivot != null)
-            {
-                CameraPivot.rotation = Quaternion.identity;
-                
-                // Asegurar que CameraHandle también está resetado
-                if (CameraHandle != null)
-                {
-                    CameraHandle.localRotation = Quaternion.identity;
-                }
-            }
-            
-            // Resetear el parámetro de pitch del Animator
+            // IMPORTANTE: Resetear ANTES de llamar a ResetSpineRotations
+            // para asegurar que el Animator está en estado neutral
             if (Animator != null)
             {
                 Animator.SetFloat(_animIDPitch, 0f);
+                Animator.Update(0f);
+            }
+            
+            // Resetear las rotaciones de los huesos de la columna a su estado neutral
+            ResetSpineRotations();
+            
+            // Resetear la rotación del CameraPivot y CameraHandle inmediatamente
+            if (CameraPivot != null)
+            {
+                CameraPivot.rotation = Quaternion.identity;
+                CameraPivot.localRotation = Quaternion.identity;
+                
+                if (CameraHandle != null)
+                {
+                    CameraHandle.rotation = Quaternion.identity;
+                    CameraHandle.localRotation = Quaternion.identity;
+                }
             }
         }
 
         private void ResetSpineRotations()
         {
-            // Forzar una actualización del Animator para obtener la pose neutral
-            if (Animator != null)
+            // Capturar y resetear las rotaciones neutrales de los huesos
+            if (SpineBones != null && SpineBones.Length > 0)
             {
-                Animator.Update(0f);
-            }
-            
-            // Capturar las rotaciones neutrales después de la actualización
-            if (SpineBones != null && _spineAnimatorRotations != null)
-            {
+                if (_spineAnimatorRotations == null)
+                {
+                    _spineAnimatorRotations = new Quaternion[SpineBones.Length];
+                }
+                
                 for (int i = 0; i < SpineBones.Length; i++)
                 {
                     if (SpineBones[i] != null)
                     {
-                        _spineAnimatorRotations[i] = SpineBones[i].localRotation;
+                        // Resetear a rotación local por defecto
+                        SpineBones[i].localRotation = Quaternion.identity;
+                        _spineAnimatorRotations[i] = Quaternion.identity;
                     }
                 }
             }
@@ -228,11 +247,14 @@ namespace Starter.Shooter
             }
 
             _previousKCCPosition = KCC.Position;
+            _isRespawning = false;
+            _respawnFrameCounter = 0;
         }
 
         public override void FixedUpdateNetwork()
         {
-            if (Health.IsAlive && GetInput<GameplayInput>(out var input))
+            // CRÍTICO: Verificar CurrentHealth además de IsAlive
+            if (Health.IsAlive && Health.CurrentHealth > 0 && GetInput<GameplayInput>(out var input))
             {
                 ProcessInput(input, Input.PreviousButtons);
             }
@@ -268,19 +290,21 @@ namespace Starter.Shooter
                     _isPlayingJumpAnimation = false;
                 }
             }
-            HitboxRoot.HitboxRootActive = Health.IsAlive;
-            KCC.SetActive(Health.IsAlive);
+            HitboxRoot.HitboxRootActive = Health.IsAlive && Health.CurrentHealth > 0;
+            KCC.SetActive(Health.IsAlive && Health.CurrentHealth > 0);
         }
 
         public override void Render()
         {
-            if (HasInputAuthority)
+            // No procesar input ni rotaciones si el jugador está muerto o muriendo
+            if (HasInputAuthority && Health.CurrentHealth > 0)
             {
                 // CORRECCIÓN: Invertir el orden - SetLookRotation espera (pitch, yaw)
                 // Input.LookRotation.x = Yaw, Input.LookRotation.y = Pitch
                 // Pasamos un Vector2(Pitch, Yaw) invirtiendo el orden
                 KCC.SetLookRotation(new Vector2(Input.LookRotation.y, Input.LookRotation.x), -90f, 90f);
             }
+            
             var moveSpeed = transform.InverseTransformVector(KCC.RealVelocity);
             float totalSpeed = new Vector2(moveSpeed.x, moveSpeed.z).magnitude;
 
@@ -289,7 +313,16 @@ namespace Starter.Shooter
             Animator.SetFloat(_animIDSpeed, totalSpeed);
             Animator.SetBool(_animIDGrounded, KCC.IsGrounded);
 
-            Animator.SetFloat(_animIDPitch, KCC.GetLookRotation(true, false).x, 0.01f, Time.deltaTime);
+            // Solo actualizar pitch si está vivo
+            if (Health.CurrentHealth > 0)
+            {
+                Animator.SetFloat(_animIDPitch, KCC.GetLookRotation(true, false).x, 0.01f, Time.deltaTime);
+            }
+            else
+            {
+                Animator.SetFloat(_animIDPitch, 0f, 0.01f, Time.deltaTime);
+            }
+            
             Animator.SetBool(_animIDJumping, _isPlayingJumpAnimation);
 
             FootstepSound.enabled = KCC.IsGrounded && KCC.RealSpeed > 1f;
@@ -309,16 +342,86 @@ namespace Starter.Shooter
 
         private void LateUpdate()
         {
-            if (Health.IsAlive == false)
+            // CRÍTICO: Verificar TANTO Health.IsAlive COMO CurrentHealth directamente
+            // para prevenir que el delay de interpolación cause código residual
+            if (Health.IsAlive == false || Health.CurrentHealth <= 0)
+            {
+                // Resetear los huesos de la columna cuando está muerto
+                // para prevenir que rotaciones residuales se queden atrapadas
+                if (SpineBones != null && _spineAnimatorRotations != null)
+                {
+                    for (int i = 0; i < SpineBones.Length; i++)
+                    {
+                        if (SpineBones[i] != null)
+                        {
+                            SpineBones[i].localRotation = Quaternion.identity;
+                            _spineAnimatorRotations[i] = Quaternion.identity;
+                        }
+                    }
+                }
+                
+                // Resetear también el CameraPivot
+                if (CameraPivot != null)
+                {
+                    CameraPivot.localRotation = Quaternion.identity;
+                }
+                
+                // Resetear el KCC LookRotation para prevenir acumulación
+                if (HasInputAuthority)
+                {
+                    KCC.SetLookRotation(0f, 0f);
+                }
+                
                 return;
+            }
+
+            // Gestión del estado de respawn
+            if (_isRespawning)
+            {
+                _respawnFrameCounter++;
+                
+                // Después de los frames de seguridad, desactivar el flag
+                if (_respawnFrameCounter >= RespawnSafetyFrames)
+                {
+                    _isRespawning = false;
+                    _respawnFrameCounter = 0;
+                    
+                    // Al finalizar el respawn, forzar una captura limpia de rotaciones
+                    if (Animator != null)
+                    {
+                        Animator.Update(0f);
+                    }
+                    CaptureAnimatorRotations();
+                }
+                
+                // Durante el respawn, mantener todo en estado neutral
+                if (CameraPivot != null)
+                {
+                    // Forzar rotación neutral durante frames de seguridad
+                    Quaternion neutralRotation = Quaternion.Euler(0, transform.eulerAngles.y, 0);
+                    CameraPivot.rotation = neutralRotation;
+                }
+                
+                // No ejecutar IK ni actualizaciones de cámara durante respawn
+                return;
+            }
 
             CaptureAnimatorRotations();
 
-            var pitchRotation = KCC.GetLookRotation(true, false);
+            var lookRotation = KCC.GetLookRotation(true, false);
 
-            ApplySpineIK(pitchRotation.x);
+            // Validación adicional: verificar que los valores de rotación son razonables
+            if (float.IsNaN(lookRotation.x) || float.IsNaN(lookRotation.y) ||
+                Mathf.Abs(lookRotation.x) > 360f || Mathf.Abs(lookRotation.y) > 360f)
+            {
+                Debug.LogWarning($"[Player] Rotación inválida detectada: {lookRotation}. Reseteando...");
+                KCC.SetLookRotation(0f, 0f);
+                return;
+            }
 
-            UpdateCameraPivotTransform(pitchRotation);
+            ApplySpineIK(lookRotation.x);
+
+            UpdateCameraPivotTransform(lookRotation);
 
             if (HasInputAuthority)
             {
@@ -350,6 +453,8 @@ namespace Starter.Shooter
             }
             Vector3 targetPosition = targetHeadPosition + HeadBone.TransformDirection(CameraOffset);
             CameraPivot.position = Vector3.Lerp(CameraPivot.position, targetPosition, Time.deltaTime * smoothSpeed);
+            
+            // Usar la rotación Y del transform directamente (ya sincronizado por KCC)
             Quaternion baseRotation = Quaternion.Euler(0, transform.eulerAngles.y, 0);
             Quaternion pitchRotationQuat = Quaternion.Euler(pitchRotation.x, 0, 0);
             CameraPivot.rotation = baseRotation * pitchRotationQuat;
@@ -364,7 +469,9 @@ namespace Starter.Shooter
                 return;
             }
 
+            // Clampear el ángulo de pitch para prevenir valores extremos
             pitchAngle = Mathf.Clamp(pitchAngle, -MaxSpineRotationAngle, MaxSpineRotationAngle);
+            
             for (int i = 0; i < SpineBones.Length; i++)
             {
                 if (SpineBones[i] == null)
