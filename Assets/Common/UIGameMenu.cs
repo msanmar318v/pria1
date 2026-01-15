@@ -27,8 +27,15 @@ namespace Starter
 		public GameObject StartGroup;
 		public GameObject DisconnectGroup;
 
+		[Header("Host Detection Settings")]
+		[Tooltip("Intervalo en segundos para verificar la conexión con el host")]
+		public float HostCheckInterval = 1f;
+
 		private NetworkRunner _runnerInstance;
 		private static string _shutdownStatus;
+		private static bool _isHostDisconnected;
+		private float _hostCheckTimer;
+		private bool _isCheckingHost;
 
 		public async void StartGame()
 		{
@@ -62,6 +69,7 @@ namespace Starter
 			{
 				StatusText.text = "";
 				PanelGroup.gameObject.SetActive(false);
+				_isCheckingHost = true;
 			}
 			else
 			{
@@ -100,8 +108,23 @@ namespace Starter
 
 			NicknameText.text = nickname;
 
-			StatusText.text = _shutdownStatus != null ? _shutdownStatus : string.Empty;
+			if (_shutdownStatus != null)
+			{
+				StatusText.text = _shutdownStatus;
+				
+				if (_isHostDisconnected)
+				{
+					StatusText.color = Color.red;
+				}
+			}
+			else
+			{
+				StatusText.text = string.Empty;
+				StatusText.color = Color.white;
+			}
+			
 			_shutdownStatus = null;
+			_isHostDisconnected = false;
 		}
 
 		private void Update()
@@ -126,6 +149,47 @@ namespace Starter
 				Cursor.lockState = CursorLockMode.Locked;
 				Cursor.visible = false;
 			}
+
+			CheckHostConnection();
+		}
+
+		private void CheckHostConnection()
+		{
+			if (!_isCheckingHost || _runnerInstance == null)
+				return;
+
+			_hostCheckTimer += Time.deltaTime;
+
+			if (_hostCheckTimer >= HostCheckInterval)
+			{
+				_hostCheckTimer = 0f;
+
+				if (_runnerInstance.IsRunning && !_runnerInstance.IsServer && !_runnerInstance.IsSharedModeMasterClient)
+				{
+					if (!_runnerInstance.IsConnectedToServer)
+					{
+						_isCheckingHost = false;
+						HandleHostDisconnection();
+					}
+				}
+			}
+		}
+
+		private void HandleHostDisconnection()
+		{
+			_shutdownStatus = "Host desconectado";
+			_isHostDisconnected = true;
+			
+			if (_runnerInstance != null)
+			{
+				var events = _runnerInstance.GetComponent<NetworkEvents>();
+				if (events != null)
+				{
+					events.OnShutdown.RemoveListener(OnShutdown);
+				}
+			}
+
+			SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
 		}
 
 		public async Task Disconnect()
@@ -133,7 +197,10 @@ namespace Starter
 			if (_runnerInstance == null)
 				return;
 
+			_isCheckingHost = false;
+
 			StatusText.text = "Desconectando...";
+			StatusText.color = Color.white;
 			PanelGroup.interactable = false;
 
 			var events = _runnerInstance.GetComponent<NetworkEvents>();
@@ -147,8 +214,34 @@ namespace Starter
 
 		private void OnShutdown(NetworkRunner runner, ShutdownReason reason)
 		{
-			_shutdownStatus = $"Desconexión: {reason}";
+			_isCheckingHost = false;
+
+			if (reason == ShutdownReason.GameClosed || 
+			    reason == ShutdownReason.HostMigration || 
+			    reason == ShutdownReason.ConnectionTimeout ||
+			    reason == ShutdownReason.ServerInRoom ||
+			    reason == ShutdownReason.DisconnectedByPluginLogic)
+			{
+				_shutdownStatus = "Host desconectado";
+				_isHostDisconnected = true;
+			}
+			else if (reason == ShutdownReason.Ok)
+			{
+				_shutdownStatus = string.Empty;
+				_isHostDisconnected = false;
+			}
+			else
+			{
+				_shutdownStatus = $"Desconexión: {reason}";
+				_isHostDisconnected = false;
+			}
+
 			SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+		}
+
+		private void OnDestroy()
+		{
+			_isCheckingHost = false;
 		}
 	}
 }

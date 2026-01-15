@@ -118,7 +118,7 @@ public class PlaySceneUIMannager : MonoBehaviour
 
         if (gameManager == null)
         {
-            gameManager = FindObjectOfType<GameManager>();
+            gameManager = FindFirstObjectByType<GameManager>();
         }
         
         InitializeHealthIcons();
@@ -466,7 +466,7 @@ public class PlaySceneUIMannager : MonoBehaviour
 
     public async void GoBack()
     {
-        var uiGameMenu = FindObjectOfType<UIGameMenu>();
+        var uiGameMenu = FindFirstObjectByType<UIGameMenu>();
         
         if (uiGameMenu != null)
         {
