@@ -1638,6 +1638,7 @@ MonoBehaviour:
     hoverExtension: {fileID: 0}
   defaultHoverMoveDistance: 20
   hoverAnimationDuration: 0.1
+  hudMainContainer: {fileID: 917797317}
   healthBackgroundIcon: {fileID: 484161529}
   healthIcon: {fileID: 1364532040}
   healthText: {fileID: 1757342405}
@@ -2490,6 +2491,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   PlayerPrefab: {fileID: 1526919877228550752, guid: 945138385752ca14e9293579b2905fef, type: 3}
+  _BestHunterNickname: 
+  _BestHunterKills: 0
 --- !u!1 &262876995
 GameObject:
   m_ObjectHideFlags: 0
@@ -8460,7 +8463,6 @@ RectTransform:
   - {fileID: 9840772}
   - {fileID: 1501313500}
   - {fileID: 1489727862}
-  - {fileID: 2107581168}
   - {fileID: 1735377386}
   - {fileID: 1989295160}
   m_Father: {fileID: 2098555895}
@@ -9058,6 +9060,7 @@ RectTransform:
   - {fileID: 1594809349}
   - {fileID: 1587073757}
   - {fileID: 575547715}
+  - {fileID: 2107581168}
   m_Father: {fileID: 744245871}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -10959,7 +10962,7 @@ MonoBehaviour:
   m_fontSizeMin: 18
   m_fontSizeMax: 72
   m_fontStyle: 0
-  m_HorizontalAlignment: 1
+  m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
@@ -19240,13 +19243,13 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2107581167}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 9932109}
-  m_Father: {fileID: 917797318}
+  m_Father: {fileID: 964094988}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
@@ -19296,7 +19299,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 2107581170}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 744245872}
+        m_TargetAssemblyTypeName: Starter.UIGameMenu, Assembly-CSharp
+        m_MethodName: TogglePanelVisibility
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &2107581170
 MonoBehaviour:
   m_ObjectHideFlags: 0

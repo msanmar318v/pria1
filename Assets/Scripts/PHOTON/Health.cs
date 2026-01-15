@@ -5,10 +5,6 @@ using System.Collections.Generic;
 
 namespace Starter.Shooter
 {
-	/// <summary>
-	/// A common component that represents entity health.
-	/// It is used for both players and chickens.
-	/// </summary>
 	public class Health : NetworkBehaviour
 	{
 		[Header("Setup")]
@@ -22,7 +18,7 @@ namespace Starter.Shooter
 
 		[Header("Hit Visual Effect")]
 		[Tooltip("Color del tinte cuando recibe daño")]
-		public Color HitTintColor = new Color(1f, 0.3f, 0.3f, 1f); // Rojo
+		public Color HitTintColor = new Color(1f, 0.3f, 0.3f, 1f);
 		
 		[Tooltip("Duración del efecto de tinte en segundos")]
 		public float HitTintDuration = 0.3f;
@@ -40,7 +36,6 @@ namespace Starter.Shooter
 		[Networked]
 		private TickTimer _deathCooldown { get; set; }
 
-		// Sistema de tinte de color
 		private List<Renderer> _renderers = new List<Renderer>();
 		private List<Material[]> _originalMaterials = new List<Material[]>();
 		private float _hitTintTimer = 0f;
@@ -55,9 +50,8 @@ namespace Starter.Shooter
 
 			if (IsAlive == false)
 			{
-				// Entity died, let's start death cooldown
 				CurrentHealth = 0;
-				_deathCooldown = TickTimer.CreateFromSeconds(Runner,  DeathTime);
+				_deathCooldown = TickTimer.CreateFromSeconds(Runner, DeathTime);
 			}
 
 			return true;
@@ -73,95 +67,70 @@ namespace Starter.Shooter
 		{
 			if (HasStateAuthority)
 			{
-				// Set initial health
 				CurrentHealth = InitialHealth;
 			}
 
-			// Inicializar sistema de tinte
 			InitializeHitTintSystem();
 		}
 
 		public override void Render()
 		{
-			// Use interpolated value when checking if entity is alive in Render.
-			// This will ensure that death effects are played AFTER the death was "confirmed"
-			// on the server in case of mispredictions (e.g. lost fire input) and also helps
-			// with showing player visual at the correct position right away after respawn
-			// (= player won't be visible before KCC teleport that is interpolated as well).
 			var interpolator = new NetworkBehaviourBufferInterpolator(this);
 			bool isAlive = interpolator.Int(nameof(CurrentHealth)) > 0;
 
 			VisualRoot.SetActive(isAlive);
 			DeathRoot.SetActive(isAlive == false);
 
-			// Actualizar el efecto de tinte
 			UpdateHitTint();
 		}
 
-		/// <summary>
-		/// Inicializa el sistema de tinte capturando todos los renderers y sus materiales originales
-		/// </summary>
 		private void InitializeHitTintSystem()
 		{
 			_renderers.Clear();
 			_originalMaterials.Clear();
 
-			// Obtener todos los renderers del VisualRoot (excluyendo los que no queremos tintar)
 			if (VisualRoot != null)
 			{
 				Renderer[] allRenderers = VisualRoot.GetComponentsInChildren<Renderer>(true);
 				
 				foreach (Renderer renderer in allRenderers)
 				{
-					// Filtrar renderers específicos si es necesario (ej: partículas, UI, etc.)
 					if (renderer.gameObject.layer == LayerMask.NameToLayer("FirstPersonOverlay"))
-						continue; // Saltar renderers de primera persona
+						continue;
 					
 					_renderers.Add(renderer);
 					
-					// Guardar los materiales originales (crear copias para no modificar los assets)
 					Material[] originalMats = new Material[renderer.materials.Length];
 					for (int i = 0; i < renderer.materials.Length; i++)
 					{
-						// Crear una copia del material para no modificar el asset original
 						originalMats[i] = new Material(renderer.materials[i]);
 					}
 					_originalMaterials.Add(originalMats);
 					
-					// Asignar las copias al renderer
 					renderer.materials = originalMats;
 				}
 			}
 		}
 
-		/// <summary>
-		/// Actualiza el efecto de tinte interpolando entre el color de hit y el color original
-		/// </summary>
 		private void UpdateHitTint()
 		{
 			if (!_isTinted)
 				return;
 
-			// Decrementar el timer
 			_hitTintTimer -= Time.deltaTime;
 
 			if (_hitTintTimer <= 0f)
 			{
-				// Efecto terminado, restaurar colores originales
 				_isTinted = false;
 				RestoreOriginalColors();
 			}
 			else
 			{
-				// Interpolar el color de vuelta al original
 				float t = _hitTintTimer / HitTintDuration;
 				ApplyTint(Color.Lerp(Color.white, HitTintColor, t));
 			}
 		}
 
-		/// <summary>
-		/// Aplica un tinte de color a todos los materiales
-		/// </summary>
 		private void ApplyTint(Color tintColor)
 		{
 			for (int i = 0; i < _renderers.Count; i++)
@@ -174,13 +143,10 @@ namespace Starter.Shooter
 				{
 					if (materials[j].HasProperty("_Color"))
 					{
-						// Obtener el color original
 						Color originalColor = _originalMaterials[i][j].color;
-						// Aplicar el tinte multiplicando por el color de hit
 						materials[j].color = originalColor * tintColor;
 					}
 					
-					// Si el material usa el shader estándar o URP Lit, también modificar _BaseColor
 					if (materials[j].HasProperty("_BaseColor"))
 					{
 						Color originalColor = _originalMaterials[i][j].GetColor("_BaseColor");
@@ -190,9 +156,6 @@ namespace Starter.Shooter
 			}
 		}
 
-		/// <summary>
-		/// Restaura los colores originales de todos los materiales
-		/// </summary>
 		private void RestoreOriginalColors()
 		{
 			for (int i = 0; i < _renderers.Count; i++)
@@ -216,9 +179,6 @@ namespace Starter.Shooter
 			}
 		}
 
-		/// <summary>
-		/// Inicia el efecto de tinte rojo
-		/// </summary>
 		private void StartHitTint()
 		{
 			_isTinted = true;
@@ -226,52 +186,37 @@ namespace Starter.Shooter
 			ApplyTint(HitTintColor);
 		}
 
-		/// <summary>
-		/// Calcula el porcentaje de vida sin decimales
-		/// </summary>
-		/// <returns>Porcentaje de vida redondeado (0-100)</returns>
 		public int GetHealthPercentage()
 		{
 			if (InitialHealth <= 0)
 				return 0;
 			
-			// Calcular porcentaje y redondear al entero más cercano
 			float percentage = ((float)CurrentHealth / (float)InitialHealth) * 100f;
 			return Mathf.RoundToInt(percentage);
 		}
 
 		private void OnCurrentHealthChangedCallback()
 		{
-			// Disparar evento de cambio de vida SIEMPRE (incluso cuando muere)
 			if (HasInputAuthority)
 			{
 				int healthPercentage = GetHealthPercentage();
 				OnHealthChanged?.Invoke(CurrentHealth, InitialHealth, healthPercentage);
-				
-				Debug.Log($"[Health] Vida actualizada: {CurrentHealth}/{InitialHealth} ({healthPercentage}%)");
 			}
 
-			// Aplicar efectos visuales (escalado y tinte) solo si sigue vivo
 			if (CurrentHealth <= 0)
 			{
-				// El jugador ha muerto, no aplicar efectos visuales
 				return;
 			}
 
 			if (HasInputAuthority == false && ScalingRoot != null)
 			{
-				// Show hit reaction by simple scale. Scaling root
-				// scale is lerped back to one in the Player script.
 				ScalingRoot.localScale = new Vector3(0.85f, 1.15f, 0.85f);
-				
-				// Aplicar efecto de tinte rojo
 				StartHitTint();
 			}
 		}
 
 		private void OnDestroy()
 		{
-			// Limpiar las copias de materiales para evitar memory leaks
 			foreach (var materials in _originalMaterials)
 			{
 				if (materials != null)

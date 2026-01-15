@@ -43,6 +43,10 @@ public class PlaySceneUIMannager : MonoBehaviour
     [Tooltip("Duración de la animación en segundos")]
     public float hoverAnimationDuration = 0.1f;
 
+    [Header("HUD Main Container")]
+    [Tooltip("GameObject contenedor principal del HUD (se activará cuando el jugador spawnee)")]
+    public GameObject hudMainContainer;
+
     [Header("HUD - Health")]
     [Tooltip("Imagen de fondo de vida (alpha reducido, siempre visible)")]
     public Image healthBackgroundIcon;
@@ -100,6 +104,7 @@ public class PlaySceneUIMannager : MonoBehaviour
     private Dictionary<RectTransform, Coroutine> activeAnimations = new Dictionary<RectTransform, Coroutine>();
     private Dictionary<RectTransform, bool> isHovering = new Dictionary<RectTransform, bool>();
     private bool _isSubscribed = false;
+    private bool _hudVisible = false;
 
     private void Start()
     {
@@ -111,242 +116,183 @@ public class PlaySceneUIMannager : MonoBehaviour
             }
         }
 
-        // Buscar GameManager si no está asignado
         if (gameManager == null)
         {
             gameManager = FindObjectOfType<GameManager>();
         }
         
-        // Configurar los alphas iniciales de las imágenes de vida
         InitializeHealthIcons();
-        
-        // Ocultar el contenedor del mejor jugador al inicio
         HideBestPlayerUI();
+        HideHUD();
     }
 
     private void Update()
     {
-        // Suscribirse a los eventos del jugador local cuando esté disponible
         if (gameManager != null && gameManager.LocalPlayer != null && 
             gameManager.LocalPlayer.HasInputAuthority && !_isSubscribed)
         {
             SubscribeToPlayerEvents(gameManager.LocalPlayer);
             SubscribeToGameManagerEvents();
+            ShowHUD();
             _isSubscribed = true;
         }
     }
 
+    #region HUD Visibility
+
+    private void ShowHUD()
+    {
+        if (hudMainContainer != null && !_hudVisible)
+        {
+            hudMainContainer.SetActive(true);
+            _hudVisible = true;
+        }
+    }
+
+    private void HideHUD()
+    {
+        if (hudMainContainer != null)
+        {
+            hudMainContainer.SetActive(false);
+            _hudVisible = false;
+        }
+    }
+
+    #endregion
+
     #region HUD Update Methods
 
-    /// <summary>
-    /// Inicializa las imágenes de vida con los alphas correctos
-    /// </summary>
     private void InitializeHealthIcons()
     {
-        // Configurar imagen de fondo (siempre visible con alpha reducido)
         if (healthBackgroundIcon != null)
         {
             Color bgColor = healthBackgroundIcon.color;
             bgColor.a = healthBackgroundAlpha;
             healthBackgroundIcon.color = bgColor;
             
-            // Asegurarse de que esté configurada como Filled
             healthBackgroundIcon.type = Image.Type.Filled;
             healthBackgroundIcon.fillMethod = Image.FillMethod.Vertical;
             healthBackgroundIcon.fillOrigin = (int)Image.OriginVertical.Top;
-            healthBackgroundIcon.fillAmount = 1f; // Siempre al 100%
+            healthBackgroundIcon.fillAmount = 1f;
         }
         
-        // Configurar imagen principal (se consume según la vida)
         if (healthIcon != null)
         {
             Color fgColor = healthIcon.color;
             fgColor.a = healthForegroundAlpha;
             healthIcon.color = fgColor;
             
-            // Asegurarse de que esté configurada como Filled
             healthIcon.type = Image.Type.Filled;
             healthIcon.fillMethod = Image.FillMethod.Vertical;
             healthIcon.fillOrigin = (int)Image.OriginVertical.Top;
-            healthIcon.fillAmount = 1f; // Empieza al 100%
+            healthIcon.fillAmount = 1f;
         }
     }
 
-    /// <summary>
-    /// Suscribe el UI Manager a los eventos del jugador local
-    /// </summary>
     private void SubscribeToPlayerEvents(Player player)
     {
-        // Suscribirse al evento de munición
         player.OnAmmoChanged.AddListener(OnAmmoChanged);
         
-        // Suscribirse al evento de vida
         if (player.Health != null)
         {
             player.Health.OnHealthChanged.AddListener(OnHealthChanged);
             
-            // Inicializar la UI de vida con los valores actuales
             int healthPercentage = player.Health.GetHealthPercentage();
             OnHealthChanged(player.Health.CurrentHealth, player.Health.InitialHealth, healthPercentage);
         }
         
-        // Suscribirse al evento de kills
         player.OnPlayerKillsChanged.AddListener(OnKillsChanged);
         
-        // Inicializar la UI con los valores actuales
         OnAmmoChanged(player.CurrentAmmo);
-        OnKillsChanged(player.PlayerKills); // Inicializar kills
-        
-        // TODO: Suscribirse a otros eventos cuando se implementen
-        // gameManager.OnBestHunterChanged += OnBestHunterChanged;
-        
-        Debug.Log("[PlaySceneUIManager] Suscrito a eventos del jugador local");
+        OnKillsChanged(player.PlayerKills);
     }
 
-    /// <summary>
-    /// Suscribe el UI Manager a los eventos del GameManager
-    /// </summary>
     private void SubscribeToGameManagerEvents()
     {
         if (gameManager != null)
         {
             gameManager.OnBestHunterChanged += OnBestHunterChanged;
-            Debug.Log("[PlaySceneUIManager] Suscrito a eventos del GameManager");
         }
     }
 
-    /// <summary>
-    /// Actualiza la visualización de la vida del jugador
-    /// </summary>
-    /// <param name="currentHealth">Vida actual</param>
-    /// <param name="maxHealth">Vida máxima</param>
-    /// <param name="healthPercentage">Porcentaje de vida (0-100)</param>
     public void OnHealthChanged(int currentHealth, int maxHealth, int healthPercentage)
     {
-        // Actualizar la imagen principal de vida (se consume de arriba a abajo)
         if (healthIcon != null)
         {
-            // fillAmount va de 0 (vacío) a 1 (lleno)
             healthIcon.fillAmount = (float)healthPercentage / 100f;
-            
-            Debug.Log($"[PlaySceneUIManager] FillAmount actualizado: {healthIcon.fillAmount} ({healthPercentage}%)");
         }
         
-        // La imagen de fondo siempre permanece al 100% con alpha reducido
-        // No es necesario actualizarla, siempre muestra la vida "máxima" con transparencia
-        
-        // Actualizar el texto de vida (mostrar porcentaje sin decimales)
         if (healthText != null)
         {
             healthText.text = $"{healthPercentage}%";
-        }
-        
-        Debug.Log($"[PlaySceneUIManager] HUD de vida actualizado - {currentHealth}/{maxHealth} ({healthPercentage}%)");
-        
-        // Cambiar color del texto según el porcentaje de vida
-        if (healthText != null)
-        {
+            
             if (healthPercentage <= 25)
             {
-                healthText.color = Color.red; // Vida crítica
+                healthText.color = Color.red;
             }
             else if (healthPercentage <= 50)
             {
-                healthText.color = Color.yellow; // Vida media
+                healthText.color = Color.yellow;
             }
             else
             {
-                healthText.color = Color.white; // Vida normal
+                healthText.color = Color.white;
             }
         }
     }
 
-    /// <summary>
-    /// Actualiza la visualización de munición del jugador
-    /// </summary>
-    /// <param name="currentAmmo">Balas actuales en el cargador</param>
     public void OnAmmoChanged(int currentAmmo)
     {
-        // Actualizar el sprite del cargador
         if (ammoImage != null && ammoSprites != null && ammoSprites.Length == 7)
         {
             int spriteIndex = Mathf.Clamp(currentAmmo, 0, 6);
             ammoImage.sprite = ammoSprites[spriteIndex];
         }
         
-        // Actualizar el texto de munición
         if (ammoText != null)
         {
             ammoText.text = currentAmmo.ToString();
         }
-        
-        Debug.Log($"[PlaySceneUIManager] HUD actualizado - Munición: {currentAmmo}");
     }
 
-    /// <summary>
-    /// Actualiza el contador de kills locales del jugador
-    /// </summary>
-    /// <param name="kills">Número de kills</param>
     public void OnKillsChanged(int kills)
     {
-        // Actualizar el texto de kills con formato de dos dígitos (01, 02, ..., 10, etc.)
         if (localKillsText != null)
         {
-            localKillsText.text = kills.ToString("D2"); // D2 = formato con 2 dígitos (01, 02, etc.)
+            localKillsText.text = kills.ToString("D2");
         }
-        
-        Debug.Log($"[PlaySceneUIManager] HUD de kills actualizado: {kills:D2}");
-        
-        // Opcional: Animación visual cuando consigues una kill
-        // StartCoroutine(AnimateKillIncrement());
     }
 
-    /// <summary>
-    /// Actualiza la información del mejor jugador
-    /// </summary>
-    /// <param name="playerName">Nombre del mejor jugador (vacío si no hay)</param>
-    /// <param name="kills">Kills del mejor jugador</param>
     public void OnBestHunterChanged(string playerName, int kills)
     {
-        // Si no hay nombre o kills es 0, ocultar el UI
         if (string.IsNullOrEmpty(playerName) || kills <= 0)
         {
             HideBestPlayerUI();
-            Debug.Log("[PlaySceneUIManager] Mejor jugador oculto (sin kills)");
             return;
         }
 
-        // Hay un mejor jugador, mostrar el UI
         ShowBestPlayerUI();
 
-        // Actualizar el nombre del mejor jugador
         if (bestPlayerNameText != null)
         {
             bestPlayerNameText.text = playerName;
         }
 
-        // Actualizar las kills del mejor jugador con formato de dos dígitos
         if (bestPlayerKillsText != null)
         {
             bestPlayerKillsText.text = kills.ToString("D2");
         }
 
-        Debug.Log($"[PlaySceneUIManager] Mejor jugador mostrado: {playerName} ({kills:D2} kills)");
-
-        // Opcional: Resaltar si el mejor jugador eres tú
         if (gameManager != null && gameManager.LocalPlayer != null && 
             gameManager.LocalPlayer.Nickname == playerName)
         {
-            // Cambiar color a dorado/amarillo para indicar que eres tú
             if (bestPlayerNameText != null)
             {
                 bestPlayerNameText.color = Color.yellow;
             }
-            Debug.Log("[PlaySceneUIManager] ¡Eres el mejor jugador!");
         }
         else
         {
-            // Color normal (blanco) si es otro jugador
             if (bestPlayerNameText != null)
             {
                 bestPlayerNameText.color = Color.white;
@@ -354,9 +300,6 @@ public class PlaySceneUIMannager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Muestra el UI del mejor jugador
-    /// </summary>
     private void ShowBestPlayerUI()
     {
         if (bestPlayerContainer != null)
@@ -365,9 +308,6 @@ public class PlaySceneUIMannager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Oculta el UI del mejor jugador
-    /// </summary>
     private void HideBestPlayerUI()
     {
         if (bestPlayerContainer != null)
@@ -375,7 +315,6 @@ public class PlaySceneUIMannager : MonoBehaviour
             bestPlayerContainer.SetActive(false);
         }
 
-        // Limpiar los textos por si acaso
         if (bestPlayerNameText != null)
         {
             bestPlayerNameText.text = string.Empty;
@@ -533,17 +472,12 @@ public class PlaySceneUIMannager : MonoBehaviour
         {
             await uiGameMenu.Disconnect();
         }
-        else
-        {
-            Debug.LogWarning("No se encontró UIGameMenu en la escena");
-        }
         
         SceneManager.LoadScene("MainMenuScene");
     }
 
     private void OnDestroy()
     {
-        // Desuscribirse de eventos al destruir
         if (_isSubscribed && gameManager != null && gameManager.LocalPlayer != null)
         {
             gameManager.LocalPlayer.OnAmmoChanged.RemoveListener(OnAmmoChanged);
@@ -554,7 +488,6 @@ public class PlaySceneUIMannager : MonoBehaviour
                 gameManager.LocalPlayer.Health.OnHealthChanged.RemoveListener(OnHealthChanged);
             }
             
-            // Desuscribirse del GameManager
             if (gameManager != null)
             {
                 gameManager.OnBestHunterChanged -= OnBestHunterChanged;

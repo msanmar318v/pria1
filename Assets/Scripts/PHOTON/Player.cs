@@ -6,9 +6,6 @@ using UnityEngine.Events;
 
 namespace Starter.Shooter
 {
-    /// <summary>
-    /// Main player scrip - controls player movement and animations.
-    /// </summary>
     public sealed class Player : NetworkBehaviour
     {
         [Header("References")]
@@ -37,7 +34,7 @@ namespace Starter.Shooter
         public float AirDeceleration = 1.3f;
 
         [Header("Jump Animation Setup")]
-        [Tooltip("Delay en segundos antes de aplicar el impulso de salto (para dar tiempo a la animación de agacharse)")]
+        [Tooltip("Delay en segundos antes de aplicar el impulso de salto")]
         public float JumpDelay = 0.2f;
         [Tooltip("Si está activado, la animación de salto comenzará inmediatamente al pulsar salto")]
         public bool StartJumpAnimationEarly = true;
@@ -58,19 +55,19 @@ namespace Starter.Shooter
         public float ReloadTime = 3f;
 
         [Header("Ammo Events")]
-        [Tooltip("Evento que se dispara cuando cambia la munición (parámetro: currentAmmo)")]
+        [Tooltip("Evento que se dispara cuando cambia la munición")]
         public UnityEvent<int> OnAmmoChanged;
 
         [Header("Player Kills Events")]
-        [Tooltip("Evento que se dispara cuando el jugador consigue una kill (parámetro: totalKills)")]
+        [Tooltip("Evento que se dispara cuando el jugador consigue una kill")]
         public UnityEvent<int> OnPlayerKillsChanged;
 
         [Header("Animation Setup")]
         public Transform ChestTargetPosition;
-        public Transform ChestBone; // Ultimo Spine del jugador
+        public Transform ChestBone;
         [Tooltip("Asigna todos los huesos de la columna desde Spine1 hasta Spine5")]
-        public Transform[] SpineBones; // Array con Spines del jugador
-        [Tooltip("Cuánto afecta la rotación de la cámara a cada hueso (0 = nada, 1 = completamente)")]
+        public Transform[] SpineBones;
+        [Tooltip("Cuánto afecta la rotación de la cámara a cada hueso")]
         [Range(0f, 1f)]
         public float SpineInfluenceMultiplier = 0.6f;
         [Tooltip("Límite máximo de rotación del IK de la columna en grados")]
@@ -82,16 +79,16 @@ namespace Starter.Shooter
         public Vector3 CameraOffset = new Vector3(0f, 0.1f, 0.05f);
 
         [Header("Camera Smoothing")]
-        [Tooltip("Umbral mínimo de movimiento vertical para que la cámara siga (en metros)")]
+        [Tooltip("Umbral mínimo de movimiento vertical para que la cámara siga")]
         public float VerticalMovementThreshold = 0.02f;
-        [Tooltip("Reducción de movimientos horizontales (0 = sin movimiento, 1 = movimiento completo)")]
+        [Tooltip("Reducción de movimientos horizontales")]
         [Range(0f, 1f)]
         public float HorizontalDampingStrength = 0.1f;
         [Tooltip("Velocidad de suavizado solo para oscilaciones pequeñas")]
         public float OscillationSmoothSpeed = 20f;
 
         [Header("Respawn Settings")]
-        [Tooltip("Frames a esperar después del respawn antes de reactivar IK de columna")]
+        [Tooltip("Frames a esperar después del respawn antes de reactivar IK")]
         public int RespawnSafetyFrames = 3;
 
         [Header("Sounds")]
@@ -111,7 +108,6 @@ namespace Starter.Shooter
         [Networked, HideInInspector, OnChangedRender(nameof(OnPlayerKillsChangedCallback))]
         public int PlayerKills { get; set; }
 
-        // Ammo System - Networked Variables
         [Networked, HideInInspector, OnChangedRender(nameof(OnCurrentAmmoChangedCallback))]
         public int CurrentAmmo { get; set; }
         [Networked, HideInInspector]
@@ -138,7 +134,6 @@ namespace Starter.Shooter
         [Networked]
         private TickTimer _reloadTimer { get; set; }
 
-        // Animation IDs
         private int _animIDSpeedX;
         private int _animIDSpeedZ;
         private int _animIDMoveSpeedZ;
@@ -149,35 +144,24 @@ namespace Starter.Shooter
         private int _animIDSpeed;
 
         private int _visibleFireCount;
-
         private Quaternion[] _spineAnimatorRotations;
-
         private Vector3 _previousKCCPosition;
         private Vector3 _filteredHeadOffset;
-
-        // Variables para prevenir el bug de rotación infinita durante respawn
         private bool _isRespawning;
         private int _respawnFrameCounter;
-
-        // Audio
         private AudioSource _reloadAudioSource;
 
         public void Respawn(Vector3 position)
         {
-            ChickenKills = 0; // Resetear kills de pollos
-            // PlayerKills NO se resetea aquí - mantiene el contador entre respawns
+            ChickenKills = 0;
             Health.Revive();
 
             KCC.SetActive(true);
             KCC.SetPosition(position);
             
-            // Resetear completamente la rotación del transform del jugador
             transform.rotation = Quaternion.identity;
-            
-            // Resetear completamente la rotación del KCC (mirar hacia adelante horizontal)
             KCC.SetLookRotation(0f, 0f);
             
-            // Si tiene autoridad de input, resetear el Input también
             if (HasInputAuthority && Input != null)
             {
                 Input.ResetLookRotation();
@@ -190,31 +174,24 @@ namespace Starter.Shooter
             _previousKCCPosition = position;
             _filteredHeadOffset = Vector3.zero;
             
-            // Resetear sistema de munición
             CurrentAmmo = MaxAmmoPerClip;
             IsReloading = false;
             _fireRateTimer = TickTimer.None;
             _reloadTimer = TickTimer.None;
             
-            // Resetear todos los elementos del HUD
             ResetHUDElements();
             
-            // Activar el flag de respawn para prevenir actualizaciones de IK
             _isRespawning = true;
             _respawnFrameCounter = 0;
             
-            // IMPORTANTE: Resetear ANTES de llamar a ResetSpineRotations
-            // para asegurar que el Animator está en estado neutral
             if (Animator != null)
             {
                 Animator.SetFloat(_animIDPitch, 0f);
                 Animator.Update(0f);
             }
             
-            // Resetear las rotaciones de los huesos de la columna a su estado neutral
             ResetSpineRotations();
             
-            // Resetear la rotación del CameraPivot y CameraHandle inmediatamente
             if (CameraPivot != null)
             {
                 CameraPivot.rotation = Quaternion.identity;
@@ -228,37 +205,22 @@ namespace Starter.Shooter
             }
         }
 
-        /// <summary>
-        /// Resetea todos los elementos del HUD para sincronizarlos con el estado del jugador.
-        /// Se llama durante el respawn para prevenir desincronizaciones.
-        /// </summary>
         private void ResetHUDElements()
         {
-            // Solo ejecutar para el jugador local
             if (!HasInputAuthority)
                 return;
 
-            // Resetear munición en el HUD
-            // Forzar la invocación del evento para actualizar la UI inmediatamente
             OnAmmoChanged?.Invoke(MaxAmmoPerClip);
             
-            // Resetear vida en el HUD
             if (Health != null)
             {
                 int healthPercentage = Health.GetHealthPercentage();
                 Health.OnHealthChanged?.Invoke(Health.CurrentHealth, Health.InitialHealth, healthPercentage);
             }
-            
-            Debug.Log($"[Player] HUD reseteado - Munición: {MaxAmmoPerClip}, Vida: {Health.CurrentHealth}/{Health.InitialHealth}");
-            
-            // TODO: Añadir aquí futuros elementos del HUD cuando se implementen:
-            // - Kills: OnKillsChanged?.Invoke(0);
-            // - Otros elementos del HUD...
         }
 
         private void ResetSpineRotations()
         {
-            // Capturar y resetear las rotaciones neutrales de los huesos
             if (SpineBones != null && SpineBones.Length > 0)
             {
                 if (_spineAnimatorRotations == null)
@@ -270,7 +232,6 @@ namespace Starter.Shooter
                 {
                     if (SpineBones[i] != null)
                     {
-                        // Resetear a rotación local por defecto
                         SpineBones[i].localRotation = Quaternion.identity;
                         _spineAnimatorRotations[i] = Quaternion.identity;
                     }
@@ -282,11 +243,8 @@ namespace Starter.Shooter
         {
             if (HasStateAuthority)
             {
-                // Inicializar munición al máximo
                 CurrentAmmo = MaxAmmoPerClip;
                 IsReloading = false;
-                
-                // Inicializar kills a 0 (solo cuando el jugador se conecta)
                 PlayerKills = 0;
             }
 
@@ -333,13 +291,12 @@ namespace Starter.Shooter
             _isRespawning = false;
             _respawnFrameCounter = 0;
 
-            // Crear AudioSource para el sonido de recarga
             if (ReloadAudioClip != null)
             {
                 _reloadAudioSource = gameObject.AddComponent<AudioSource>();
                 _reloadAudioSource.clip = ReloadAudioClip;
                 _reloadAudioSource.playOnAwake = false;
-                _reloadAudioSource.spatialBlend = 1f; // 3D sound
+                _reloadAudioSource.spatialBlend = 1f;
                 _reloadAudioSource.minDistance = 1f;
                 _reloadAudioSource.maxDistance = 20f;
             }
@@ -347,7 +304,6 @@ namespace Starter.Shooter
 
         public override void FixedUpdateNetwork()
         {
-            // CRÍTICO: Verificar CurrentHealth además de IsAlive
             if (Health.IsAlive && Health.CurrentHealth > 0 && GetInput<GameplayInput>(out var input))
             {
                 ProcessInput(input, Input.PreviousButtons);
@@ -357,12 +313,10 @@ namespace Starter.Shooter
                 MovePlayer(Vector3.zero, 0f);
             }
 
-            // Gestión de sistema de recarga
             if (IsReloading)
             {
                 if (_reloadTimer.Expired(Runner))
                 {
-                    // Recarga completada
                     CurrentAmmo = MaxAmmoPerClip;
                     IsReloading = false;
                     _reloadTimer = TickTimer.None;
@@ -370,7 +324,6 @@ namespace Starter.Shooter
             }
             else
             {
-                // Verificar si necesita recargar automáticamente
                 if (CurrentAmmo <= 0 && !_reloadTimer.IsRunning)
                 {
                     StartReload();
@@ -411,12 +364,8 @@ namespace Starter.Shooter
 
         public override void Render()
         {
-            // No procesar input ni rotaciones si el jugador está muerto o muriendo
             if (HasInputAuthority && Health.CurrentHealth > 0)
             {
-                // CORRECCIÓN: Invertir el orden - SetLookRotation espera (pitch, yaw)
-                // Input.LookRotation.x = Yaw, Input.LookRotation.y = Pitch
-                // Pasamos un Vector2(Pitch, Yaw) invirtiendo el orden
                 KCC.SetLookRotation(new Vector2(Input.LookRotation.y, Input.LookRotation.x), -90f, 90f);
             }
             
@@ -428,7 +377,6 @@ namespace Starter.Shooter
             Animator.SetFloat(_animIDSpeed, totalSpeed);
             Animator.SetBool(_animIDGrounded, KCC.IsGrounded);
 
-            // Solo actualizar pitch si está vivo
             if (Health.CurrentHealth > 0)
             {
                 Animator.SetFloat(_animIDPitch, KCC.GetLookRotation(true, false).x, 0.01f, Time.deltaTime);
@@ -457,12 +405,8 @@ namespace Starter.Shooter
 
         private void LateUpdate()
         {
-            // CRÍTICO: Verificar TANTO Health.IsAlive COMO CurrentHealth directamente
-            // para prevenir que el delay de interpolación cause código residual
             if (Health.IsAlive == false || Health.CurrentHealth <= 0)
             {
-                // Resetear los huesos de la columna cuando está muerto
-                // para prevenir que rotaciones residuales se queden atrapadas
                 if (SpineBones != null && _spineAnimatorRotations != null)
                 {
                     for (int i = 0; i < SpineBones.Length; i++)
@@ -475,13 +419,11 @@ namespace Starter.Shooter
                     }
                 }
                 
-                // Resetear también el CameraPivot
                 if (CameraPivot != null)
                 {
                     CameraPivot.localRotation = Quaternion.identity;
                 }
                 
-                // Resetear el KCC LookRotation para prevenir acumulación
                 if (HasInputAuthority)
                 {
                     KCC.SetLookRotation(0f, 0f);
@@ -490,18 +432,15 @@ namespace Starter.Shooter
                 return;
             }
 
-            // Gestión del estado de respawn
             if (_isRespawning)
             {
                 _respawnFrameCounter++;
                 
-                // Después de los frames de seguridad, desactivar el flag
                 if (_respawnFrameCounter >= RespawnSafetyFrames)
                 {
                     _isRespawning = false;
                     _respawnFrameCounter = 0;
                     
-                    // Al finalizar el respawn, forzar una captura limpia de rotaciones
                     if (Animator != null)
                     {
                         Animator.Update(0f);
@@ -509,15 +448,12 @@ namespace Starter.Shooter
                     CaptureAnimatorRotations();
                 }
                 
-                // Durante el respawn, mantener todo en estado neutral
                 if (CameraPivot != null)
                 {
-                    // Forzar rotación neutral durante frames de seguridad
                     Quaternion neutralRotation = Quaternion.Euler(0, transform.eulerAngles.y, 0);
                     CameraPivot.rotation = neutralRotation;
                 }
                 
-                // No ejecutar IK ni actualizaciones de cámara durante respawn
                 return;
             }
 
@@ -525,17 +461,14 @@ namespace Starter.Shooter
 
             var lookRotation = KCC.GetLookRotation(true, false);
 
-            // Validación adicional: verificar que los valores de rotación son razonables
             if (float.IsNaN(lookRotation.x) || float.IsNaN(lookRotation.y) ||
                 Mathf.Abs(lookRotation.x) > 360f || Mathf.Abs(lookRotation.y) > 360f)
             {
-                Debug.LogWarning($"[Player] Rotación inválida detectada: {lookRotation}. Reseteando...");
                 KCC.SetLookRotation(0f, 0f);
                 return;
             }
 
             ApplySpineIK(lookRotation.x);
-
             UpdateCameraPivotTransform(lookRotation);
 
             if (HasInputAuthority)
@@ -569,7 +502,6 @@ namespace Starter.Shooter
             Vector3 targetPosition = targetHeadPosition + HeadBone.TransformDirection(CameraOffset);
             CameraPivot.position = Vector3.Lerp(CameraPivot.position, targetPosition, Time.deltaTime * smoothSpeed);
             
-            // Usar la rotación Y del transform directamente (ya sincronizado por KCC)
             Quaternion baseRotation = Quaternion.Euler(0, transform.eulerAngles.y, 0);
             Quaternion pitchRotationQuat = Quaternion.Euler(pitchRotation.x, 0, 0);
             CameraPivot.rotation = baseRotation * pitchRotationQuat;
@@ -584,7 +516,6 @@ namespace Starter.Shooter
                 return;
             }
 
-            // Clampear el ángulo de pitch para prevenir valores extremos
             pitchAngle = Mathf.Clamp(pitchAngle, -MaxSpineRotationAngle, MaxSpineRotationAngle);
             
             for (int i = 0; i < SpineBones.Length; i++)
@@ -632,8 +563,6 @@ namespace Starter.Shooter
 
         private void ProcessInput(GameplayInput input, NetworkButtons previousButtons)
         {
-            // CORRECCIÓN: Invertir el orden - SetLookRotation espera (pitch, yaw)
-            // Input.LookRotation.x = Yaw, Input.LookRotation.y = Pitch
             KCC.SetLookRotation(new Vector2(input.LookRotation.y, input.LookRotation.x), -90f, 90f);
             
             var moveDirection = KCC.TransformRotation * new Vector3(input.MoveDirection.x, 0f, input.MoveDirection.y);
@@ -641,12 +570,6 @@ namespace Starter.Shooter
 
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Jump))
             {
-                // Solo procesar el salto si:
-                // 1. El jugador está en el suelo
-                // 2. No hay una solicitud de salto pendiente
-                // 3. No hay un timer de salto activo
-                // 4. No está ya saltando
-                // 5. No está reproduciendo la animación de salto
                 if (KCC.IsGrounded &&
                     !_jumpRequested &&
                     !_jumpTimer.IsRunning &&
@@ -655,7 +578,6 @@ namespace Starter.Shooter
                 {
                     _jumpRequested = true;
                 }
-                // Si alguna de las condiciones falla, ignorar completamente la solicitud
             }
 
             MovePlayer(desiredMoveVelocity, 0f);
@@ -687,32 +609,14 @@ namespace Starter.Shooter
 
         private void TryFire()
         {
-            // Verificar si puede disparar
-            if (IsReloading)
-            {
-                Debug.Log("[Player] No se puede disparar mientras se recarga");
+            if (IsReloading || CurrentAmmo <= 0)
                 return;
-            }
-
-            if (CurrentAmmo <= 0)
-            {
-                Debug.Log("[Player] Sin munición, iniciando recarga automática");
-                return; // La recarga automática se maneja en FixedUpdateNetwork
-            }
 
             if (_fireRateTimer.IsRunning && !_fireRateTimer.Expired(Runner))
-            {
-                Debug.Log("[Player] Debe esperar entre disparos (Fire Rate)");
                 return;
-            }
 
-            // Disparar
             Fire();
-            
-            // Decrementar munición
             CurrentAmmo--;
-            
-            // Establecer cooldown de disparo
             _fireRateTimer = TickTimer.CreateFromSeconds(Runner, FireRate);
         }
 
@@ -721,13 +625,10 @@ namespace Starter.Shooter
             IsReloading = true;
             _reloadTimer = TickTimer.CreateFromSeconds(Runner, ReloadTime);
             
-            // Reproducir sonido de recarga (solo en el cliente local)
             if (HasInputAuthority && _reloadAudioSource != null && ReloadAudioClip != null)
             {
                 _reloadAudioSource.PlayOneShot(ReloadAudioClip);
             }
-            
-            Debug.Log($"[Player] Iniciando recarga - Duración: {ReloadTime}s");
         }
 
         private void Fire()
@@ -743,18 +644,14 @@ namespace Starter.Shooter
                 {
                     if (health.IsAlive == false)
                     {
-                        // Detectar si matamos a un jugador o a un pollo
                         var targetPlayer = health.GetComponent<Player>();
                         
                         if (targetPlayer != null)
                         {
-                            // Matamos a un jugador - incrementar kills
                             PlayerKills++;
-                            Debug.Log($"[Player] ¡Kill conseguida! Total: {PlayerKills}");
                         }
                         else
                         {
-                            // Matamos a un pollo - actualizar ChickenKills
                             ChickenKills += health.GetComponent<Chicken>() != null ? 1 : 0;
                         }
                     }
@@ -784,10 +681,6 @@ namespace Starter.Shooter
 
         private void OnCurrentAmmoChangedCallback()
         {
-            // Este método se ejecuta cuando CurrentAmmo cambia (NetworkBehaviour callback)
-            Debug.Log($"[Player] Munición actualizada: {CurrentAmmo}/{MaxAmmoPerClip}");
-            
-            // Disparar el UnityEvent solo para el jugador local
             if (HasInputAuthority)
             {
                 OnAmmoChanged?.Invoke(CurrentAmmo);
@@ -796,9 +689,6 @@ namespace Starter.Shooter
 
         private void OnPlayerKillsChangedCallback()
         {
-            Debug.Log($"[Player] Kills actualizadas: {PlayerKills}");
-            
-            // Disparar el UnityEvent solo para el jugador local
             if (HasInputAuthority)
             {
                 OnPlayerKillsChanged?.Invoke(PlayerKills);
@@ -842,15 +732,11 @@ namespace Starter.Shooter
             Nickname = nickname;
         }
 
-        /// <summary>
-        /// Resetea las kills del jugador a 0. Se llama cuando el jugador se desconecta.
-        /// </summary>
         public void ResetPlayerKills()
         {
             if (HasStateAuthority)
             {
                 PlayerKills = 0;
-                Debug.Log("[Player] Kills reseteadas a 0 por desconexión");
             }
         }
     }
