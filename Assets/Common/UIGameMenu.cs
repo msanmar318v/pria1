@@ -33,49 +33,50 @@ namespace Starter
 		private NetworkRunner _runnerInstance;
 		private static string _shutdownStatus;
 
-		public async void StartGame()
-		{
-			await Disconnect();
+        public async void StartGame()
+        {
+            await Disconnect();
+            PlayerPrefs.SetString("PlayerName", NicknameText.text);
+            _runnerInstance = Instantiate(RunnerPrefab);
 
-			PlayerPrefs.SetString("PlayerName", NicknameText.text);
+            var events = _runnerInstance.GetComponent<NetworkEvents>();
+            events.OnShutdown.AddListener(OnShutdown);
 
-			_runnerInstance = Instantiate(RunnerPrefab);
+            var sceneInfo = new NetworkSceneInfo();
+            sceneInfo.AddSceneRef(SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex));
 
-			// Añade un listener para desconexiones para poder manejar desconexiones inesperadas
-			var events = _runnerInstance.GetComponent<NetworkEvents>();
-			events.OnShutdown.AddListener(OnShutdown);
+            // IMPORTANTE: Usa un nombre fijo o asegúrate que ambos clientes usen el mismo
+            string sessionName = string.IsNullOrEmpty(RoomText.text) ? "DefaultRoom" : RoomText.text;
 
-			var sceneInfo = new NetworkSceneInfo();
-			sceneInfo.AddSceneRef(SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex));
+            Debug.Log($"Intentando unirse/crear sesión: {sessionName}");
 
-			var startArguments = new StartGameArgs()
-			{
-				GameMode = Application.isEditor && ForceSinglePlayer ? GameMode.Single : GameMode.AutoHostOrClient,
-				SessionName = RoomText.text,
-				PlayerCount = MaxPlayerCount,
-				// Necesitamos especificar una propiedad de sesión para que el matchmaking decida dónde quiere unirse el jugador.
-				// De lo contrario, jugadores de la escena Platformer podrían conectarse al juego ThirdPersonCharacter, etc.
-				SessionProperties = new Dictionary<string, SessionProperty> {["GameMode"] = GameModeIdentifier},
-				Scene = sceneInfo,
-			};
+            var startArguments = new StartGameArgs()
+            {
+                GameMode = Application.isEditor && ForceSinglePlayer ? GameMode.Single : GameMode.AutoHostOrClient,
+                SessionName = sessionName,
+                PlayerCount = MaxPlayerCount,
+                SessionProperties = new Dictionary<string, SessionProperty> { ["GameMode"] = GameModeIdentifier },
+                Scene = sceneInfo,
+            };
 
-			StatusText.text = startArguments.GameMode == GameMode.Single ? "Iniciando partida individual..." : "Conectando...";
+            StatusText.text = $"Buscando sala '{sessionName}'...";
+            var startTask = _runnerInstance.StartGame(startArguments);
+            await startTask;
 
-			var startTask = _runnerInstance.StartGame(startArguments);
-			await startTask;
+            if (startTask.Result.Ok)
+            {
+                Debug.Log($"Conectado correctamente. Es Host: {_runnerInstance.IsServer}");
+                StatusText.text = _runnerInstance.IsServer ? "Host de la partida" : "Conectado como cliente";
+                PanelGroup.gameObject.SetActive(false);
+            }
+            else
+            {
+                StatusText.text = $"Error: {startTask.Result.ShutdownReason}";
+                Debug.LogError($"Error de conexión: {startTask.Result.ShutdownReason}");
+            }
+        }
 
-			if (startTask.Result.Ok)
-			{
-				StatusText.text = "";
-				PanelGroup.gameObject.SetActive(false);
-			}
-			else
-			{
-				StatusText.text = $"Error de conexión: {startTask.Result.ShutdownReason}";
-			}
-		}
-
-		public async void DisconnectClicked()
+        public async void DisconnectClicked()
 		{
 			await Disconnect();
 		}
