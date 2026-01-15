@@ -61,6 +61,10 @@ namespace Starter.Shooter
         [Tooltip("Evento que se dispara cuando cambia la munición (parámetro: currentAmmo)")]
         public UnityEvent<int> OnAmmoChanged;
 
+        [Header("Player Kills Events")]
+        [Tooltip("Evento que se dispara cuando el jugador consigue una kill (parámetro: totalKills)")]
+        public UnityEvent<int> OnPlayerKillsChanged;
+
         [Header("Animation Setup")]
         public Transform ChestTargetPosition;
         public Transform ChestBone; // Ultimo Spine del jugador
@@ -104,6 +108,8 @@ namespace Starter.Shooter
         public string Nickname { get; set; }
         [Networked, HideInInspector]
         public int ChickenKills { get; set; }
+        [Networked, HideInInspector, OnChangedRender(nameof(OnPlayerKillsChangedCallback))]
+        public int PlayerKills { get; set; }
 
         // Ammo System - Networked Variables
         [Networked, HideInInspector, OnChangedRender(nameof(OnCurrentAmmoChangedCallback))]
@@ -158,7 +164,8 @@ namespace Starter.Shooter
 
         public void Respawn(Vector3 position)
         {
-            ChickenKills = 0;
+            ChickenKills = 0; // Resetear kills de pollos
+            // PlayerKills NO se resetea aquí - mantiene el contador entre respawns
             Health.Revive();
 
             KCC.SetActive(true);
@@ -278,6 +285,9 @@ namespace Starter.Shooter
                 // Inicializar munición al máximo
                 CurrentAmmo = MaxAmmoPerClip;
                 IsReloading = false;
+                
+                // Inicializar kills a 0 (solo cuando el jugador se conecta)
+                PlayerKills = 0;
             }
 
             if (HasInputAuthority)
@@ -733,7 +743,20 @@ namespace Starter.Shooter
                 {
                     if (health.IsAlive == false)
                     {
-                        ChickenKills += health.GetComponent<Chicken>() != null ? 1 : -10;
+                        // Detectar si matamos a un jugador o a un pollo
+                        var targetPlayer = health.GetComponent<Player>();
+                        
+                        if (targetPlayer != null)
+                        {
+                            // Matamos a un jugador - incrementar kills
+                            PlayerKills++;
+                            Debug.Log($"[Player] ¡Kill conseguida! Total: {PlayerKills}");
+                        }
+                        else
+                        {
+                            // Matamos a un pollo - actualizar ChickenKills
+                            ChickenKills += health.GetComponent<Chicken>() != null ? 1 : 0;
+                        }
                     }
                 }
                 _hitPosition = hit.Point;
@@ -768,6 +791,17 @@ namespace Starter.Shooter
             if (HasInputAuthority)
             {
                 OnAmmoChanged?.Invoke(CurrentAmmo);
+            }
+        }
+
+        private void OnPlayerKillsChangedCallback()
+        {
+            Debug.Log($"[Player] Kills actualizadas: {PlayerKills}");
+            
+            // Disparar el UnityEvent solo para el jugador local
+            if (HasInputAuthority)
+            {
+                OnPlayerKillsChanged?.Invoke(PlayerKills);
             }
         }
 
@@ -806,6 +840,18 @@ namespace Starter.Shooter
         private void RPC_SetNickname(string nickname)
         {
             Nickname = nickname;
+        }
+
+        /// <summary>
+        /// Resetea las kills del jugador a 0. Se llama cuando el jugador se desconecta.
+        /// </summary>
+        public void ResetPlayerKills()
+        {
+            if (HasStateAuthority)
+            {
+                PlayerKills = 0;
+                Debug.Log("[Player] Kills reseteadas a 0 por desconexión");
+            }
         }
     }
 }

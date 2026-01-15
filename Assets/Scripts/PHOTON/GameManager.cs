@@ -89,8 +89,24 @@ namespace Starter.Shooter
 			int index = _players.FindIndex(t => t.Object.InputAuthority == playerRef);
 			if (index >= 0)
 			{
+				// Resetear kills del jugador que se desconecta
+				_players[index].ResetPlayerKills();
+				
 				Runner.Despawn(_players[index].Object);
 				_players.RemoveAt(index);
+				
+				Debug.Log($"[GameManager] Jugador {playerRef} desconectado");
+			}
+			
+			// NUEVO: Resetear las kills de TODOS los jugadores restantes
+			// Esto asegura que el juego 1v1 empiece de cero cuando alguien se desconecta
+			for (int i = 0; i < _players.Count; i++)
+			{
+				if (_players[i] != null)
+				{
+					_players[i].ResetPlayerKills();
+					Debug.Log($"[GameManager] Reseteando kills del jugador restante: {_players[i].Nickname}");
+				}
 			}
 		}
 

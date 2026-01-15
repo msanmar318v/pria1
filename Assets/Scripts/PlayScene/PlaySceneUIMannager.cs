@@ -182,11 +182,14 @@ public class PlaySceneUIMannager : MonoBehaviour
             OnHealthChanged(player.Health.CurrentHealth, player.Health.InitialHealth, healthPercentage);
         }
         
-        // Inicializar la UI de munición con los valores actuales
+        // Suscribirse al evento de kills
+        player.OnPlayerKillsChanged.AddListener(OnKillsChanged);
+        
+        // Inicializar la UI con los valores actuales
         OnAmmoChanged(player.CurrentAmmo);
+        OnKillsChanged(player.PlayerKills); // Inicializar kills
         
         // TODO: Suscribirse a otros eventos cuando se implementen
-        // player.OnKillsChanged += OnKillsChanged;
         // gameManager.OnBestHunterChanged += OnBestHunterChanged;
         
         Debug.Log("[PlaySceneUIManager] Suscrito a eventos del jugador local");
@@ -266,9 +269,16 @@ public class PlaySceneUIMannager : MonoBehaviour
     /// <param name="kills">Número de kills</param>
     public void OnKillsChanged(int kills)
     {
-        // TODO: Implementar actualización de kills locales
-        // - Actualizar localKillsText.text con el valor de kills
-        // - Opcional: animación de incremento
+        // Actualizar el texto de kills con formato de dos dígitos (01, 02, ..., 10, etc.)
+        if (localKillsText != null)
+        {
+            localKillsText.text = kills.ToString("D2"); // D2 = formato con 2 dígitos (01, 02, etc.)
+        }
+        
+        Debug.Log($"[PlaySceneUIManager] HUD de kills actualizado: {kills:D2}");
+        
+        // Opcional: Animación visual cuando consigues una kill
+        // StartCoroutine(AnimateKillIncrement());
     }
 
     /// <summary>
@@ -444,6 +454,7 @@ public class PlaySceneUIMannager : MonoBehaviour
         if (_isSubscribed && gameManager != null && gameManager.LocalPlayer != null)
         {
             gameManager.LocalPlayer.OnAmmoChanged.RemoveListener(OnAmmoChanged);
+            gameManager.LocalPlayer.OnPlayerKillsChanged.RemoveListener(OnKillsChanged);
             
             if (gameManager.LocalPlayer.Health != null)
             {
@@ -451,7 +462,6 @@ public class PlaySceneUIMannager : MonoBehaviour
             }
             
             // TODO: Desuscribirse de otros eventos cuando se implementen
-            // gameManager.LocalPlayer.OnKillsChanged -= OnKillsChanged;
             // gameManager.OnBestHunterChanged -= OnBestHunterChanged;
         }
     }
