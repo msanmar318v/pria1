@@ -1,32 +1,49 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using Fusion;
+using System;
 
 namespace Starter.Shooter
 {
-	/// <summary>
-	/// Handles player connections (spawning of Player instances).
-	/// </summary>
 	public sealed class GameManager : NetworkBehaviour, IPlayerJoined, IPlayerLeft
 	{
 		public Player PlayerPrefab;
 
 		[Networked]
 		public PlayerRef BestHunter { get; set; }
+		
+		[Networked, Capacity(24), OnChangedRender(nameof(OnBestHunterDataChanged))]
+		public string BestHunterNickname { get; set; }
+		
+		[Networked, OnChangedRender(nameof(OnBestHunterDataChanged))]
+		public int BestHunterKills { get; set; }
+		
 		public Player LocalPlayer { get; private set; }
+
+		public event Action<string, int> OnBestHunterChanged;
 
 		private List<Player> _players = new(32);
 		private SpawnPoint[] _spawnPoints;
 
 		public override void Spawned()
 		{
-			_spawnPoints = FindObjectsOfType<SpawnPoint>();
+			_spawnPoints = FindObjectsByType<SpawnPoint>(FindObjectsSortMode.None);
+			
+			if (HasStateAuthority)
+			{
+				BestHunterNickname = string.Empty;
+				BestHunterKills = 0;
+			}
 		}
 
 		public override void FixedUpdateNetwork()
 		{
+			if (!HasStateAuthority)
+				return;
+
 			BestHunter = PlayerRef.None;
 			int bestHunterKills = 0;
+			Player bestHunterPlayer = null;
 
 			for (int i = 0; i < _players.Count; i++)
 			{
@@ -34,7 +51,6 @@ namespace Starter.Shooter
 
 				if (player.KCC.Position.y < -15f)
 				{
-					// Player fell, let's kill him
 					player.Health.TakeHit(1000);
 				}
 
@@ -43,24 +59,38 @@ namespace Starter.Shooter
 					player.Respawn(GetSpawnPosition());
 				}
 
-				// Calculate the best hunter
-				if (player.Health.IsAlive && player.ChickenKills > bestHunterKills)
+				if (player.Health.IsAlive && player.PlayerKills > bestHunterKills)
 				{
-					bestHunterKills = player.ChickenKills;
+					bestHunterKills = player.PlayerKills;
 					BestHunter = player.Object.InputAuthority;
+					bestHunterPlayer = player;
 				}
 			}
+
+			if (bestHunterPlayer != null && bestHunterKills > 0)
+			{
+				BestHunterNickname = bestHunterPlayer.Nickname;
+				BestHunterKills = bestHunterKills;
+			}
+			else
+			{
+				BestHunterNickname = string.Empty;
+				BestHunterKills = 0;
+			}
+		}
+
+		private void OnBestHunterDataChanged()
+		{
+			OnBestHunterChanged?.Invoke(BestHunterNickname, BestHunterKills);
 		}
 
 		public override void Despawned(NetworkRunner runner, bool hasState)
 		{
-			// Clear the reference because UI can try to access it even after despawn
 			LocalPlayer = null;
 		}
 
 		public override void Render()
 		{
-			// Prepare LocalPlayer property that can be accessed from UI
 			if (LocalPlayer == null || LocalPlayer.Object == null || LocalPlayer.Object.IsValid == false)
 			{
 				var playerObject = Runner.GetPlayerObject(Runner.LocalPlayer);
@@ -76,8 +106,6 @@ namespace Starter.Shooter
 			var player = Runner.Spawn(PlayerPrefab, GetSpawnPosition(), Quaternion.identity, playerRef);
 			Runner.SetPlayerObject(playerRef, player.Object);
 
-			// This list is state authority only,
-			// so it is valid to have this list non-networked
 			_players.Add(player);
 		}
 
@@ -89,20 +117,34 @@ namespace Starter.Shooter
 			int index = _players.FindIndex(t => t.Object.InputAuthority == playerRef);
 			if (index >= 0)
 			{
+				_players[index].ResetPlayerKills();
+				
 				Runner.Despawn(_players[index].Object);
 				_players.RemoveAt(index);
 			}
+			
+			for (int i = 0; i < _players.Count; i++)
+			{
+				if (_players[i] != null)
+				{
+					_players[i].ResetPlayerKills();
+				}
+			}
+
+			BestHunter = PlayerRef.None;
+			BestHunterNickname = string.Empty;
+			BestHunterKills = 0;
 		}
 
 		private Vector3 GetSpawnPosition()
 		{
-            if (_spawnPoints == null || _spawnPoints.Length == 0)
-            {
-                return new Vector3(-22f, 1.5f, 0f);
-            }
+			if (_spawnPoints == null || _spawnPoints.Length == 0)
+			{
+				return new Vector3(-22f, 1.5f, 0f);
+			}
 
-            var spawnPoint = _spawnPoints[Random.Range(0, _spawnPoints.Length)];
-			var randomPositionOffset = Random.insideUnitCircle * spawnPoint.Radius;
+			var spawnPoint = _spawnPoints[UnityEngine.Random.Range(0, _spawnPoints.Length)];
+			var randomPositionOffset = UnityEngine.Random.insideUnitCircle * spawnPoint.Radius;
 			return spawnPoint.transform.position + new Vector3(randomPositionOffset.x, 0f, randomPositionOffset.y);
 		}
 	}

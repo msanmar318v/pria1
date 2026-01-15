@@ -7,19 +7,16 @@ using UnityEngine.SceneManagement;
 
 namespace Starter
 {
-	/// <summary>
-	/// Muestra el menú del juego, maneja la conexión/desconexión del jugador a la partida de red y el bloqueo del cursor.
-	/// </summary>
 	public class UIGameMenu : MonoBehaviour
 	{
 		[Header("Configuración de Inicio")]
-		[Tooltip("Especifica a qué modo de juego debe unirse el jugador - ej. Platformer, ThirdPersonCharacter")]
+		[Tooltip("Especifica a qué modo de juego debe unirse el jugador")]
 		public string GameModeIdentifier;
 		public NetworkRunner RunnerPrefab;
 		public int MaxPlayerCount = 8;
 
 		[Header("Depuración")]
-		[Tooltip("Para propósitos de depuración es posible forzar un juego individual (inicia más rápido)")]
+		[Tooltip("Para propósitos de depuración es posible forzar un juego individual")]
 		public bool ForceSinglePlayer;
 
 		[Header("Configuración de UI")]
@@ -30,8 +27,15 @@ namespace Starter
 		public GameObject StartGroup;
 		public GameObject DisconnectGroup;
 
+		[Header("Host Detection Settings")]
+		[Tooltip("Intervalo en segundos para verificar la conexión con el host")]
+		public float HostCheckInterval = 1f;
+
 		private NetworkRunner _runnerInstance;
 		private static string _shutdownStatus;
+		private static bool _isHostDisconnected;
+		private float _hostCheckTimer;
+		private bool _isCheckingHost;
 
 		public async void StartGame()
 		{
@@ -41,7 +45,6 @@ namespace Starter
 
 			_runnerInstance = Instantiate(RunnerPrefab);
 
-			// Añade un listener para desconexiones para poder manejar desconexiones inesperadas
 			var events = _runnerInstance.GetComponent<NetworkEvents>();
 			events.OnShutdown.AddListener(OnShutdown);
 
@@ -53,8 +56,6 @@ namespace Starter
 				GameMode = Application.isEditor && ForceSinglePlayer ? GameMode.Single : GameMode.AutoHostOrClient,
 				SessionName = RoomText.text,
 				PlayerCount = MaxPlayerCount,
-				// Necesitamos especificar una propiedad de sesión para que el matchmaking decida dónde quiere unirse el jugador.
-				// De lo contrario, jugadores de la escena Platformer podrían conectarse al juego ThirdPersonCharacter, etc.
 				SessionProperties = new Dictionary<string, SessionProperty> {["GameMode"] = GameModeIdentifier},
 				Scene = sceneInfo,
 			};
@@ -68,6 +69,7 @@ namespace Starter
 			{
 				StatusText.text = "";
 				PanelGroup.gameObject.SetActive(false);
+				_isCheckingHost = true;
 			}
 			else
 			{
@@ -83,14 +85,13 @@ namespace Starter
 		public async void BackToMenu()
 		{
 			await Disconnect();
-
 			SceneManager.LoadScene(0);
 		}
 
 		public void TogglePanelVisibility()
 		{
 			if (PanelGroup.gameObject.activeSelf && _runnerInstance == null)
-				return; // El panel no puede ocultarse si el juego no está en ejecución
+				return;
 
 			PanelGroup.gameObject.SetActive(!PanelGroup.gameObject.activeSelf);
 		}
@@ -107,14 +108,27 @@ namespace Starter
 
 			NicknameText.text = nickname;
 
-			// Intenta cargar el estado de desconexión previo
-			StatusText.text = _shutdownStatus != null ? _shutdownStatus : string.Empty;
+			if (_shutdownStatus != null)
+			{
+				StatusText.text = _shutdownStatus;
+				
+				if (_isHostDisconnected)
+				{
+					StatusText.color = Color.red;
+				}
+			}
+			else
+			{
+				StatusText.text = string.Empty;
+				StatusText.color = Color.white;
+			}
+			
 			_shutdownStatus = null;
+			_isHostDisconnected = false;
 		}
 
 		private void Update()
 		{
-			// Las teclas Enter/Esc se usan para bloquear/desbloquear el cursor en la vista del juego.
 			if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Escape))
 			{
 				TogglePanelVisibility();
@@ -135,6 +149,47 @@ namespace Starter
 				Cursor.lockState = CursorLockMode.Locked;
 				Cursor.visible = false;
 			}
+
+			CheckHostConnection();
+		}
+
+		private void CheckHostConnection()
+		{
+			if (!_isCheckingHost || _runnerInstance == null)
+				return;
+
+			_hostCheckTimer += Time.deltaTime;
+
+			if (_hostCheckTimer >= HostCheckInterval)
+			{
+				_hostCheckTimer = 0f;
+
+				if (_runnerInstance.IsRunning && !_runnerInstance.IsServer && !_runnerInstance.IsSharedModeMasterClient)
+				{
+					if (!_runnerInstance.IsConnectedToServer)
+					{
+						_isCheckingHost = false;
+						HandleHostDisconnection();
+					}
+				}
+			}
+		}
+
+		private void HandleHostDisconnection()
+		{
+			_shutdownStatus = "Host desconectado";
+			_isHostDisconnected = true;
+			
+			if (_runnerInstance != null)
+			{
+				var events = _runnerInstance.GetComponent<NetworkEvents>();
+				if (events != null)
+				{
+					events.OnShutdown.RemoveListener(OnShutdown);
+				}
+			}
+
+			SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
 		}
 
 		public async Task Disconnect()
@@ -142,30 +197,51 @@ namespace Starter
 			if (_runnerInstance == null)
 				return;
 
+			_isCheckingHost = false;
+
 			StatusText.text = "Desconectando...";
+			StatusText.color = Color.white;
 			PanelGroup.interactable = false;
 
-			// Elimina el listener de desconexión ya que nos estamos desconectando deliberadamente
 			var events = _runnerInstance.GetComponent<NetworkEvents>();
 			events.OnShutdown.RemoveListener(OnShutdown);
 
 			await _runnerInstance.Shutdown();
 			_runnerInstance = null;
 
-			// Es necesario restablecer los objetos de red de la escena, recarga toda la escena
 			SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
 		}
 
 		private void OnShutdown(NetworkRunner runner, ShutdownReason reason)
 		{
-			// Ocurrió una desconexión inesperada (ej. el host se desconectó)
+			_isCheckingHost = false;
 
-			// Guarda el estado en una variable estática, se usará en OnEnable después de cargar la escena
-			_shutdownStatus = $"Desconexión: {reason}";
-			Debug.LogWarning(_shutdownStatus);
+			if (reason == ShutdownReason.GameClosed || 
+			    reason == ShutdownReason.HostMigration || 
+			    reason == ShutdownReason.ConnectionTimeout ||
+			    reason == ShutdownReason.ServerInRoom ||
+			    reason == ShutdownReason.DisconnectedByPluginLogic)
+			{
+				_shutdownStatus = "Host desconectado";
+				_isHostDisconnected = true;
+			}
+			else if (reason == ShutdownReason.Ok)
+			{
+				_shutdownStatus = string.Empty;
+				_isHostDisconnected = false;
+			}
+			else
+			{
+				_shutdownStatus = $"Desconexión: {reason}";
+				_isHostDisconnected = false;
+			}
 
-			// Es necesario restablecer los objetos de red de la escena, recarga toda la escena
 			SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+		}
+
+		private void OnDestroy()
+		{
+			_isCheckingHost = false;
 		}
 	}
 }

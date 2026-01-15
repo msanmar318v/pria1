@@ -10,9 +10,6 @@ namespace Starter.Shooter
 		Dash,
 	}
 
-	/// <summary>
-	/// Input structure sent over network to the server.
-	/// </summary>
 	public struct GameplayInput : INetworkInput
 	{
 		public Vector2 LookRotation;
@@ -20,10 +17,6 @@ namespace Starter.Shooter
 		public NetworkButtons Buttons;
 	}
 
-	/// <summary>
-	/// PlayerInput handles accumulating player input from Unity and passes the accumulated input to Fusion.
-	/// This version of PlayerInput showcases usage of IBeforeUpdate and IAfterTick callbacks.
-	/// </summary>
 	public sealed class PlayerInput : NetworkBehaviour, IBeforeUpdate, IAfterTick
 	{
 		[Networked]
@@ -37,7 +30,6 @@ namespace Starter.Shooter
 			if (HasInputAuthority == false)
 				return;
 
-			// Register to Fusion input poll callback
 			var networkEvents = Runner.GetComponent<NetworkEvents>();
 			networkEvents.OnInput.AddListener(OnInput);
 		}
@@ -54,25 +46,24 @@ namespace Starter.Shooter
 			}
 		}
 
-		// BeforeUpdate is called during Unity's Update loop before any OnInput/FixedUpdateNetwork/Render functions are executed.
-		// Therefore using BeforeUpdate to accumulate input is slightly more precise than doing so in Update function as the latest input
-		// will be already used in FixedUpdateNetwork if it will be called in this update loop. This gets more important the lower render rate the player has.
+		public void ResetLookRotation()
+		{
+			_input.LookRotation = Vector2.zero;
+		}
+
 		void IBeforeUpdate.BeforeUpdate()
 		{
-			// Accumulate input from Keyboard/Mouse. Input accumulation is mandatory (at least for the look rotation) as Update can be
-			// called multiple times before next OnInput is called - common if rendering speed is faster than Fusion simulation.
-
 			if (HasInputAuthority == false)
 				return;
 
-			// Accumulate input only if the cursor is locked.
 			if (Cursor.lockState != CursorLockMode.Locked)
 			{
 				_input.MoveDirection = default;
 				return;
 			}
 
-			_input.LookRotation += new Vector2(-Input.GetAxisRaw("Mouse Y"), Input.GetAxisRaw("Mouse X"));
+			_input.LookRotation += new Vector2(Input.GetAxisRaw("Mouse X"), -Input.GetAxisRaw("Mouse Y"));
+			_input.LookRotation.y = Mathf.Clamp(_input.LookRotation.y, -90f, 90f);
 
 			var moveDirection = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
 			_input.MoveDirection = moveDirection.normalized;
@@ -83,19 +74,14 @@ namespace Starter.Shooter
 			_input.Buttons.Set(EInputButton.Dash, Input.GetKey(KeyCode.LeftShift));
 		}
 
-		// AfterTick is called after all FixedUpdateNetwork calls on NetworkBehaviours were executed for this tick.
-		// It is perfect for actions that should be executed at the end of the tick.
 		void IAfterTick.AfterTick()
 		{
-			// Save current button input (if any) as previous.
-			// Previous buttons need to be networked to detect correctly pressed/released events.
 			if (GetInput(out GameplayInput input))
 			{
 				PreviousButtons = input.Buttons;
 			}
 		}
 
-		// Fusion polls accumulated input. This callback can be executed multiple times in a row if there is a performance spike.
 		private void OnInput(NetworkRunner runner, NetworkInput networkInput)
 		{
 			networkInput.Set(_input);
