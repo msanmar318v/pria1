@@ -276,7 +276,10 @@ namespace Starter.Shooter
         {
             if (HasInputAuthority)
             {
-                KCC.SetLookRotation(Input.LookRotation, -90f, 90f);
+                // CORRECCIÓN: Invertir el orden - SetLookRotation espera (pitch, yaw)
+                // Input.LookRotation.x = Yaw, Input.LookRotation.y = Pitch
+                // Pasamos un Vector2(Pitch, Yaw) invirtiendo el orden
+                KCC.SetLookRotation(new Vector2(Input.LookRotation.y, Input.LookRotation.x), -90f, 90f);
             }
             var moveSpeed = transform.InverseTransformVector(KCC.RealVelocity);
             float totalSpeed = new Vector2(moveSpeed.x, moveSpeed.z).magnitude;
@@ -407,11 +410,10 @@ namespace Starter.Shooter
 
         private void ProcessInput(GameplayInput input, NetworkButtons previousButtons)
         {
-            // CORRECCIÓN: Clampear solo el PITCH (Y) del input ANTES de procesarlo
-            Vector2 clampedLookRotation = input.LookRotation;
-            clampedLookRotation.y = Mathf.Clamp(clampedLookRotation.y, -90f, 90f);
+            // CORRECCIÓN: Invertir el orden - SetLookRotation espera (pitch, yaw)
+            // Input.LookRotation.x = Yaw, Input.LookRotation.y = Pitch
+            KCC.SetLookRotation(new Vector2(input.LookRotation.y, input.LookRotation.x), -90f, 90f);
             
-            KCC.SetLookRotation(clampedLookRotation, -90f, 90f);
             var moveDirection = KCC.TransformRotation * new Vector3(input.MoveDirection.x, 0f, input.MoveDirection.y);
             var desiredMoveVelocity = moveDirection * WalkSpeed;
 
