@@ -129,12 +129,14 @@ namespace Starter
 
 		private void Update()
 		{
+			// MODIFICADO: Declarar playSceneUI una sola vez al inicio del método
+			var playSceneUI = FindFirstObjectByType<PlaySceneUIMannager>();
+			bool isGameOverActive = playSceneUI != null && playSceneUI.IsGameOverPanelActive;
+
 			// Verificar si el panel de Game Over está activo antes de procesar ESC
 			if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Escape))
 			{
-				// Buscar el PlaySceneUIManager para verificar si el Game Over está activo
-				var playSceneUI = FindFirstObjectByType<PlaySceneUIMannager>();
-				if (playSceneUI != null && playSceneUI.IsGameOverPanelActive)
+				if (isGameOverActive)
 				{
 					// Si el panel de Game Over está activo, no abrir el menú de escape
 					return;
@@ -153,11 +155,12 @@ namespace Starter
 				Cursor.lockState = CursorLockMode.None;
 				Cursor.visible = true;
 			}
-			else
+			else if (!isGameOverActive) // Solo bloquear cursor si Game Over NO está activo
 			{
 				Cursor.lockState = CursorLockMode.Locked;
 				Cursor.visible = false;
 			}
+			// Si Game Over está activo, no modificar el cursor (lo maneja PlaySceneUIMannager)
 
 			CheckHostConnection();
 		}

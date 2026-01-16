@@ -56,9 +56,15 @@ namespace Starter.Shooter
 			if (HasInputAuthority == false)
 				return;
 
-			if (Cursor.lockState != CursorLockMode.Locked)
+			// NUEVO: Verificar si el juego ha terminado
+			var gameManager = FindFirstObjectByType<GameManager>();
+			bool isGameOver = gameManager != null && gameManager.IsGameOver;
+
+			// Si el juego ha terminado o el cursor no está bloqueado, no procesar input
+			if (isGameOver || Cursor.lockState != CursorLockMode.Locked)
 			{
 				_input.MoveDirection = default;
+				// NUEVO: No actualizar la rotación de la cámara
 				return;
 			}
 
