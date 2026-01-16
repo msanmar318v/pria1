@@ -2,11 +2,25 @@
 using UnityEngine;
 using Fusion;
 using System;
+using System.Linq;
 
 namespace Starter.Shooter
 {
 	public sealed class GameManager : NetworkBehaviour, IPlayerJoined, IPlayerLeft
 	{
+		[System.Serializable]
+		public struct PlayerData : INetworkStruct
+		{
+			[Networked, Capacity(24)]
+			public string Nickname { get; set; }
+			
+			[Networked]
+			public int Kills { get; set; }
+			
+			[Networked]
+			public PlayerRef PlayerRef { get; set; }
+		}
+
 		public Player PlayerPrefab;
 
 		[Networked]
@@ -18,12 +32,23 @@ namespace Starter.Shooter
 		[Networked, OnChangedRender(nameof(OnBestHunterDataChanged))]
 		public int BestHunterKills { get; set; }
 		
+		[Networked, OnChangedRender(nameof(OnGameOverStateChanged))]
+		public NetworkBool IsGameOver { get; set; }
+		
+		[Networked, Capacity(24)]
+		public NetworkArray<PlayerData> NetworkedPlayerData => default;
+		
+		[Networked]
+		public int PlayerCount { get; set; }
+		
 		public Player LocalPlayer { get; private set; }
 
 		public event Action<string, int> OnBestHunterChanged;
+		public event Action<string> OnGameOver;
 
 		private List<Player> _players = new(32);
 		private SpawnPoint[] _spawnPoints;
+		private const int KILLS_TO_WIN = 10;
 
 		public override void Spawned()
 		{
@@ -33,6 +58,8 @@ namespace Starter.Shooter
 			{
 				BestHunterNickname = string.Empty;
 				BestHunterKills = 0;
+				IsGameOver = false;
+				PlayerCount = 0;
 			}
 		}
 
@@ -41,9 +68,30 @@ namespace Starter.Shooter
 			if (!HasStateAuthority)
 				return;
 
+			// Si el juego ha terminado, no procesar lógica del juego
+			if (IsGameOver)
+				return;
+
 			BestHunter = PlayerRef.None;
 			int bestHunterKills = 0;
 			Player bestHunterPlayer = null;
+
+			// Actualizar datos de red de jugadores
+			PlayerCount = _players.Count;
+			for (int i = 0; i < _players.Count && i < NetworkedPlayerData.Length; i++)
+			{
+				var player = _players[i];
+				if (player != null && player.Object != null && player.Object.IsValid)
+				{
+					var playerData = new PlayerData
+					{
+						Nickname = player.Nickname,
+						Kills = player.PlayerKills,
+						PlayerRef = player.Object.InputAuthority
+					};
+					NetworkedPlayerData.Set(i, playerData);
+				}
+			}
 
 			for (int i = 0; i < _players.Count; i++)
 			{
@@ -65,6 +113,15 @@ namespace Starter.Shooter
 					BestHunter = player.Object.InputAuthority;
 					bestHunterPlayer = player;
 				}
+
+				// Verificar si algún jugador alcanzó 10 kills
+				if (player.PlayerKills >= KILLS_TO_WIN && !IsGameOver)
+				{
+					IsGameOver = true;
+					BestHunterNickname = player.Nickname;
+					BestHunterKills = player.PlayerKills;
+					return;
+				}
 			}
 
 			if (bestHunterPlayer != null && bestHunterKills > 0)
@@ -82,6 +139,14 @@ namespace Starter.Shooter
 		private void OnBestHunterDataChanged()
 		{
 			OnBestHunterChanged?.Invoke(BestHunterNickname, BestHunterKills);
+		}
+
+		private void OnGameOverStateChanged()
+		{
+			if (IsGameOver)
+			{
+				OnGameOver?.Invoke(BestHunterNickname);
+			}
 		}
 
 		public override void Despawned(NetworkRunner runner, bool hasState)
@@ -134,6 +199,71 @@ namespace Starter.Shooter
 			BestHunter = PlayerRef.None;
 			BestHunterNickname = string.Empty;
 			BestHunterKills = 0;
+		}
+
+		[Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+		public void RPC_RestartGame()
+		{
+			// Ocultar el panel de Game Over para todos los clientes
+			var playSceneUI = FindFirstObjectByType<PlaySceneUIMannager>();
+			if (playSceneUI != null)
+			{
+				playSceneUI.HideGameOverPanel();
+			}
+
+			// Solo el host ejecuta la lógica de reinicio
+			if (HasStateAuthority)
+			{
+				RestartGameInternal();
+			}
+		}
+
+		private void RestartGameInternal()
+		{
+			if (!HasStateAuthority)
+				return;
+
+			// Resetear el estado de Game Over
+			IsGameOver = false;
+			BestHunter = PlayerRef.None;
+			BestHunterNickname = string.Empty;
+			BestHunterKills = 0;
+
+			// Resetear y respawnear todos los jugadores
+			for (int i = 0; i < _players.Count; i++)
+			{
+				var player = _players[i];
+				if (player != null && player.Object != null && player.Object.IsValid)
+				{
+					// Resetear kills
+					player.ResetPlayerKills();
+					
+					// Respawnear el jugador
+					player.Respawn(GetSpawnPosition());
+				}
+			}
+		}
+
+		public List<Player> GetAllPlayers()
+		{
+			return new List<Player>(_players);
+		}
+
+		// Método para obtener datos de jugadores desde la red (usado por clientes no-host)
+		public List<(string nickname, int kills)> GetNetworkedPlayerData()
+		{
+			var playerDataList = new List<(string nickname, int kills)>();
+			
+			for (int i = 0; i < PlayerCount && i < NetworkedPlayerData.Length; i++)
+			{
+				var data = NetworkedPlayerData[i];
+				if (!string.IsNullOrEmpty(data.Nickname))
+				{
+					playerDataList.Add((data.Nickname, data.Kills));
+				}
+			}
+			
+			return playerDataList;
 		}
 
 		private Vector3 GetSpawnPosition()

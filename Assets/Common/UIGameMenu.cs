@@ -129,8 +129,17 @@ namespace Starter
 
 		private void Update()
 		{
+			// Verificar si el panel de Game Over está activo antes de procesar ESC
 			if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Escape))
 			{
+				// Buscar el PlaySceneUIManager para verificar si el Game Over está activo
+				var playSceneUI = FindFirstObjectByType<PlaySceneUIMannager>();
+				if (playSceneUI != null && playSceneUI.IsGameOverPanelActive)
+				{
+					// Si el panel de Game Over está activo, no abrir el menú de escape
+					return;
+				}
+
 				TogglePanelVisibility();
 			}
 

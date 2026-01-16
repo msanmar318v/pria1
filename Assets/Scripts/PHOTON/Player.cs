@@ -353,6 +353,18 @@ namespace Starter.Shooter
                     _dashCooldownTimer = 0f;
             }
 
+            // NUEVO: Verificar si el juego ha terminado
+            var gameManager = FindFirstObjectByType<GameManager>();
+            bool isGameOver = gameManager != null && gameManager.IsGameOver;
+
+            // Si el juego ha terminado, no procesar input
+            if (isGameOver)
+            {
+                MovePlayer(Vector3.zero, 0f);
+                HitboxRoot.HitboxRootActive = false;
+                return;
+            }
+
             if (Health.IsAlive && Health.CurrentHealth > 0 && GetInput<GameplayInput>(out var input))
             {
                 ProcessInput(input, Input.PreviousButtons);

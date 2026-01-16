@@ -97,6 +97,26 @@ public class PlaySceneUIMannager : MonoBehaviour
     [Tooltip("GameObject contenedor de todos los elementos del mejor jugador (se activará/desactivará)")]
     public GameObject bestPlayerContainer;
 
+    [Header("Game Over Panel")]
+    [Tooltip("Panel principal de Game Over (debe estar desactivado al inicio)")]
+    public GameObject gameOverPanel;
+    
+    [Tooltip("Texto que muestra el mensaje del ganador")]
+    public TextMeshProUGUI gameOverWinnerText;
+    
+    [Tooltip("Contenedor padre donde se generarán las PlayerCards")]
+    public RectTransform playerCardsContainer;
+    
+    [Tooltip("Prefab de PlayerCard que se clonará para cada jugador")]
+    public GameObject playerCardPrefab;
+    
+    [Header("Game Over - Host/Non-Host Elements")]
+    [Tooltip("Elementos que solo se mostrarán si eres el HOST")]
+    public List<GameObject> hostOnlyElements = new List<GameObject>();
+    
+    [Tooltip("Elementos que solo se mostrarán si NO eres el HOST")]
+    public List<GameObject> nonHostElements = new List<GameObject>();
+
     [Header("Game References")]
     [Tooltip("Referencia al GameManager (se buscará automáticamente si no se asigna)")]
     public GameManager gameManager;
@@ -105,6 +125,9 @@ public class PlaySceneUIMannager : MonoBehaviour
     private Dictionary<RectTransform, bool> isHovering = new Dictionary<RectTransform, bool>();
     private bool _isSubscribed = false;
     private bool _hudVisible = false;
+    private List<GameObject> _spawnedPlayerCards = new List<GameObject>();
+
+    public bool IsGameOverPanelActive => gameOverPanel != null && gameOverPanel.activeSelf;
 
     private void Start()
     {
@@ -124,6 +147,12 @@ public class PlaySceneUIMannager : MonoBehaviour
         InitializeHealthIcons();
         HideBestPlayerUI();
         HideHUD();
+        
+        // Asegurarse de que el panel de Game Over esté oculto al inicio
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.SetActive(false);
+        }
     }
 
     private void Update()
@@ -135,6 +164,19 @@ public class PlaySceneUIMannager : MonoBehaviour
             SubscribeToGameManagerEvents();
             ShowHUD();
             _isSubscribed = true;
+        }
+
+        // NUEVO: Forzar el cursor visible cuando el Game Over está activo
+        if (IsGameOverPanelActive)
+        {
+            if (Cursor.lockState != CursorLockMode.None)
+            {
+                Cursor.lockState = CursorLockMode.None;
+            }
+            if (!Cursor.visible)
+            {
+                Cursor.visible = true;
+            }
         }
     }
 
@@ -212,6 +254,7 @@ public class PlaySceneUIMannager : MonoBehaviour
         if (gameManager != null)
         {
             gameManager.OnBestHunterChanged += OnBestHunterChanged;
+            gameManager.OnGameOver += OnGameOverTriggered;
         }
     }
 
@@ -324,6 +367,188 @@ public class PlaySceneUIMannager : MonoBehaviour
         {
             bestPlayerKillsText.text = "00";
         }
+    }
+
+    #endregion
+
+    #region Game Over Panel
+
+    private void OnGameOverTriggered(string winnerName)
+    {
+        ShowGameOverPanel(winnerName);
+    }
+
+    private void ShowGameOverPanel(string winnerName)
+    {
+        if (gameOverPanel == null)
+        {
+            Debug.LogError("Game Over Panel no está asignado en el inspector");
+            return;
+        }
+
+        // Mostrar el panel
+        gameOverPanel.SetActive(true);
+
+        // Actualizar el texto del ganador
+        if (gameOverWinnerText != null)
+        {
+            gameOverWinnerText.text = $"{winnerName} ha sido el mejor vaquero";
+        }
+
+        // Generar las PlayerCards
+        GeneratePlayerCards();
+
+        // Mostrar/ocultar elementos según si es Host o no
+        UpdateHostElements();
+
+        // Desbloquear el cursor para poder interactuar con el panel
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    private void GeneratePlayerCards()
+    {
+        if (playerCardsContainer == null || playerCardPrefab == null || gameManager == null)
+        {
+            Debug.LogError("Faltan referencias para generar PlayerCards");
+            return;
+        }
+
+        // Limpiar PlayerCards anteriores si existen
+        ClearPlayerCards();
+
+        List<(string nickname, int kills)> playerDataList;
+
+        // Obtener datos de jugadores según si somos host o no
+        if (gameManager.LocalPlayer != null && gameManager.LocalPlayer.Object.HasStateAuthority)
+        {
+            // Somos el host, usar la lista local
+            var allPlayers = gameManager.GetAllPlayers();
+            playerDataList = new List<(string nickname, int kills)>();
+            foreach (var player in allPlayers)
+            {
+                if (player != null && player.Object != null && player.Object.IsValid)
+                {
+                    playerDataList.Add((player.Nickname, player.PlayerKills));
+                }
+            }
+        }
+        else
+        {
+            // Somos un cliente, usar datos de red
+            playerDataList = gameManager.GetNetworkedPlayerData();
+        }
+
+        // Ordenar jugadores por kills (descendente - más kills arriba)
+        playerDataList.Sort((a, b) => b.kills.CompareTo(a.kills));
+
+        // Generar una PlayerCard por cada jugador
+        // Primera card en Y -75, las siguientes en -100 respecto a la anterior
+        float yOffset = 75f; // Posición Y de la primera card
+        const float CARD_SPACING = 100f; // Espacio entre cards
+
+        foreach (var playerData in playerDataList)
+        {
+            // Instanciar la PlayerCard
+            GameObject cardInstance = Instantiate(playerCardPrefab, playerCardsContainer);
+            RectTransform cardRect = cardInstance.GetComponent<RectTransform>();
+
+            // Posicionar la card
+            // Primera card: -75, segunda: -175, tercera: -275, etc.
+            cardRect.anchoredPosition = new Vector2(cardRect.anchoredPosition.x, -yOffset);
+            
+            // Incrementar offset para la siguiente card
+            yOffset += CARD_SPACING;
+
+            // Activar la card por si estaba desactivada en el prefab
+            cardInstance.SetActive(true);
+
+            // Rellenar los datos de la card
+            // Buscar los componentes TextMeshProUGUI dentro de la card
+            TextMeshProUGUI[] texts = cardInstance.GetComponentsInChildren<TextMeshProUGUI>(true);
+            
+            foreach (TextMeshProUGUI text in texts)
+            {
+                if (text.name == "PlayerName")
+                {
+                    text.text = playerData.nickname;
+                }
+                else if (text.name == "PlayerKills")
+                {
+                    text.text = playerData.kills.ToString("D2");
+                }
+            }
+
+            // Guardar la referencia para poder limpiarla después
+            _spawnedPlayerCards.Add(cardInstance);
+        }
+    }
+
+    private void ClearPlayerCards()
+    {
+        foreach (GameObject card in _spawnedPlayerCards)
+        {
+            if (card != null)
+            {
+                Destroy(card);
+            }
+        }
+        _spawnedPlayerCards.Clear();
+    }
+
+    private void UpdateHostElements()
+    {
+        if (gameManager == null || gameManager.LocalPlayer == null)
+            return;
+
+        bool isHost = gameManager.LocalPlayer.Object.HasStateAuthority;
+
+        // Mostrar elementos de host si es el host
+        foreach (GameObject element in hostOnlyElements)
+        {
+            if (element != null)
+            {
+                element.SetActive(isHost);
+            }
+        }
+
+        // Mostrar elementos de non-host si NO es el host
+        foreach (GameObject element in nonHostElements)
+        {
+            if (element != null)
+            {
+                element.SetActive(!isHost);
+            }
+        }
+    }
+
+    public void OnRematchButtonClicked()
+    {
+        if (gameManager == null)
+            return;
+
+        // Solo el host puede iniciar la revancha
+        if (!gameManager.LocalPlayer.Object.HasStateAuthority)
+            return;
+
+        // Llamar al RPC para reiniciar el juego (esto ocultará el panel para todos)
+        gameManager.RPC_RestartGame();
+    }
+
+    public void HideGameOverPanel()
+    {
+        // Ocultar el panel de Game Over
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.SetActive(false);
+        }
+
+        // Limpiar las player cards
+        ClearPlayerCards();
+
+        // Bloquear el cursor nuevamente
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
     #endregion
@@ -491,7 +716,10 @@ public class PlaySceneUIMannager : MonoBehaviour
             if (gameManager != null)
             {
                 gameManager.OnBestHunterChanged -= OnBestHunterChanged;
+                gameManager.OnGameOver -= OnGameOverTriggered;
             }
         }
+
+        ClearPlayerCards();
     }
 }
