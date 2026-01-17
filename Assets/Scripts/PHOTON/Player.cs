@@ -151,12 +151,19 @@ namespace Starter.Shooter
         [Networked]
         private TickTimer _reloadTimer { get; set; }
         
+        [Header("Dash")]
         [Networked]
         private float _dashTimer { get; set; }
         [Networked]
         private float _dashCooldownTimer { get; set; }
         [Networked]
         private NetworkBool _isInvulnerable { get; set; }
+        
+        [Header("Power Up")]
+        [Networked]
+        private float _speedMultiplier { get; set; }
+        [Networked]
+        private float _speedBuffTimer { get; set; }
         
         private bool _localHitPlayer;
 
@@ -338,6 +345,17 @@ namespace Starter.Shooter
 
         public override void FixedUpdateNetwork()
         {
+            
+            if (_speedBuffTimer > 0f)
+            {
+                _speedBuffTimer -= Runner.DeltaTime;
+                if (_speedBuffTimer <= 0f)
+                {
+                    _speedBuffTimer = 0f;
+                    _speedMultiplier = 1f; // volver a normal
+                }
+            }
+            
             if (_dashTimer > 0f)
             {
                 _dashTimer -= Runner.DeltaTime;
@@ -632,7 +650,8 @@ namespace Starter.Shooter
             KCC.SetLookRotation(new Vector2(input.LookRotation.y, input.LookRotation.x), -90f, 90f);
             
             var moveDirection = KCC.TransformRotation * new Vector3(input.MoveDirection.x, 0f, input.MoveDirection.y);
-            var desiredMoveVelocity = moveDirection * WalkSpeed;
+            float currentWalkSpeed = WalkSpeed * (_speedMultiplier > 0f ? _speedMultiplier : 1f);
+            var desiredMoveVelocity = moveDirection * currentWalkSpeed;
 
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Jump))
             {
@@ -914,6 +933,18 @@ namespace Starter.Shooter
             {
                 PlayerKills = 0;
             }
+        }
+        
+        public void ApplySpeedPowerUp(float speedMultiplier, float duration)
+        {
+            Debug.Log($"Power up de velocidad recogido: x{speedMultiplier} durante {duration} segundos");
+            
+            // Solo la autoridad debe fijar estos valores
+            if (HasStateAuthority == false)
+                return;
+
+            _speedMultiplier = speedMultiplier;
+            _speedBuffTimer = duration;
         }
     }
 }
