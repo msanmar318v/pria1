@@ -68,7 +68,6 @@ namespace Starter.Shooter
 			if (!HasStateAuthority)
 				return;
 
-			// Si el juego ha terminado, no procesar lógica del juego
 			if (IsGameOver)
 				return;
 
@@ -76,7 +75,6 @@ namespace Starter.Shooter
 			int bestHunterKills = 0;
 			Player bestHunterPlayer = null;
 
-			// Actualizar datos de red de jugadores
 			PlayerCount = _players.Count;
 			for (int i = 0; i < _players.Count && i < NetworkedPlayerData.Length; i++)
 			{
@@ -114,7 +112,6 @@ namespace Starter.Shooter
 					bestHunterPlayer = player;
 				}
 
-				// Verificar si algún jugador alcanzó 10 kills
 				if (player.PlayerKills >= KILLS_TO_WIN && !IsGameOver)
 				{
 					IsGameOver = true;
@@ -204,14 +201,12 @@ namespace Starter.Shooter
 		[Rpc(RpcSources.StateAuthority, RpcTargets.All)]
 		public void RPC_RestartGame()
 		{
-			// Ocultar el panel de Game Over para todos los clientes
 			var playSceneUI = FindFirstObjectByType<PlaySceneUIMannager>();
 			if (playSceneUI != null)
 			{
 				playSceneUI.HideGameOverPanel();
 			}
 
-			// Solo el host ejecuta la lógica de reinicio
 			if (HasStateAuthority)
 			{
 				RestartGameInternal();
@@ -223,22 +218,17 @@ namespace Starter.Shooter
 			if (!HasStateAuthority)
 				return;
 
-			// Resetear el estado de Game Over
 			IsGameOver = false;
 			BestHunter = PlayerRef.None;
 			BestHunterNickname = string.Empty;
 			BestHunterKills = 0;
 
-			// Resetear y respawnear todos los jugadores
 			for (int i = 0; i < _players.Count; i++)
 			{
 				var player = _players[i];
 				if (player != null && player.Object != null && player.Object.IsValid)
 				{
-					// Resetear kills
 					player.ResetPlayerKills();
-					
-					// Respawnear el jugador
 					player.Respawn(GetSpawnPosition());
 				}
 			}
@@ -249,7 +239,6 @@ namespace Starter.Shooter
 			return new List<Player>(_players);
 		}
 
-		// Método para obtener datos de jugadores desde la red (usado por clientes no-host)
 		public List<(string nickname, int kills)> GetNetworkedPlayerData()
 		{
 			var playerDataList = new List<(string nickname, int kills)>();

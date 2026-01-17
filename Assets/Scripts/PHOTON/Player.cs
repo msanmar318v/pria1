@@ -42,7 +42,14 @@ namespace Starter.Shooter
         [Header("Fire Setup")]
         public LayerMask HitMask;
         public GameObject ImpactPrefab;
-        public ParticleSystem MuzzleParticle;
+        [Tooltip("Prefab que contiene el efecto de muzzle flash (con múltiples ParticleSystems)")]
+        public GameObject MuzzleFlashPrefab;
+        [Tooltip("Punto de spawn del muzzle flash (normalmente la punta del arma)")]
+        public Transform MuzzleFlashSpawnPoint;
+        [Tooltip("Rotación adicional para orientar correctamente los quads/planes 2D del muzzle flash")]
+        public Vector3 MuzzleFlashRotationOffset = new Vector3(0f, 0f, 0f);
+        [Tooltip("Si está activado, el muzzle flash seguirá al arma durante su duración")]
+        public bool MuzzleFlashFollowsWeapon = true;
 
         [Header("Ammo Setup")]
         [Tooltip("Munición máxima del cargador")]
@@ -105,6 +112,8 @@ namespace Starter.Shooter
         public AudioClip JumpAudioClip;
         public AudioClip LandAudioClip;
         public AudioClip ReloadAudioClip;
+        [Tooltip("Audio que suena cuando impactas a otro jugador")]
+        public AudioClip HitPlayerAudioClip;
 
         [Header("VFX")]
         public ParticleSystem DustParticles;
@@ -142,13 +151,14 @@ namespace Starter.Shooter
         [Networked]
         private TickTimer _reloadTimer { get; set; }
         
-        // DASH: Variables de red para el dash
         [Networked]
         private float _dashTimer { get; set; }
         [Networked]
         private float _dashCooldownTimer { get; set; }
         [Networked]
         private NetworkBool _isInvulnerable { get; set; }
+        
+        private bool _localHitPlayer;
 
         private int _animIDSpeedX;
         private int _animIDSpeedZ;
@@ -195,7 +205,6 @@ namespace Starter.Shooter
             _fireRateTimer = TickTimer.None;
             _reloadTimer = TickTimer.None;
             
-            // DASH: Resetear variables del dash
             _dashTimer = 0f;
             _dashCooldownTimer = 0f;
             _isInvulnerable = false;
@@ -268,7 +277,6 @@ namespace Starter.Shooter
                 IsReloading = false;
                 PlayerKills = 0;
                 
-                // DASH: Inicializar variables del dash
                 _dashTimer = 0f;
                 _dashCooldownTimer = 0f;
                 _isInvulnerable = false;
@@ -330,7 +338,6 @@ namespace Starter.Shooter
 
         public override void FixedUpdateNetwork()
         {
-            // DASH: Actualizar timers del dash
             if (_dashTimer > 0f)
             {
                 _dashTimer -= Runner.DeltaTime;
@@ -353,11 +360,9 @@ namespace Starter.Shooter
                     _dashCooldownTimer = 0f;
             }
 
-            // NUEVO: Verificar si el juego ha terminado
             var gameManager = FindFirstObjectByType<GameManager>();
             bool isGameOver = gameManager != null && gameManager.IsGameOver;
 
-            // Si el juego ha terminado, no procesar input
             if (isGameOver)
             {
                 MovePlayer(Vector3.zero, 0f);
@@ -641,7 +646,6 @@ namespace Starter.Shooter
                 }
             }
 
-            // DASH: Detectar input del dash
             if (input.Buttons.WasPressed(previousButtons, EInputButton.Dash))
             {
                 TryStartDash(moveDirection);
@@ -659,7 +663,6 @@ namespace Starter.Shooter
         {
             KCC.SetGravity(KCC.RealVelocity.y >= 0f ? UpGravity : DownGravity);
 
-            // DASH: Si estamos en dash, mantener la velocidad del dash
             if (_dashTimer > 0f)
             {
                 KCC.Move(_moveVelocity, jumpImpulse: 0f);
@@ -680,15 +683,11 @@ namespace Starter.Shooter
 
             KCC.Move(_moveVelocity, jumpImpulse);
         }
-
-        // DASH: Método para iniciar el dash
         private void TryStartDash(Vector3 moveDirection)
         {
-            // No puedes hacer dash si estás ya dashing, en cooldown o muerto
             if (_dashTimer > 0f || _dashCooldownTimer > 0f || Health.IsAlive == false)
                 return;
 
-            // Si no hay dirección de movimiento, dashear hacia adelante
             if (moveDirection.sqrMagnitude < 0.01f)
             {
                 moveDirection = KCC.TransformRotation * Vector3.forward;
@@ -696,18 +695,15 @@ namespace Starter.Shooter
 
             moveDirection.Normalize();
 
-            // Activar dash
             _dashTimer = DashDuration;
             _dashCooldownTimer = DashCooldown + DashDuration;
             _isInvulnerable = true;
             
-            // Sincronizar invulnerabilidad con Health
             if (Health != null)
             {
                 Health.IsInvulnerable = true;
             }
 
-            // Aplicar velocidad de dash
             _moveVelocity = moveDirection * DashSpeed;
         }
 
@@ -738,6 +734,7 @@ namespace Starter.Shooter
         private void Fire()
         {
             _hitPosition = Vector3.zero;
+            _localHitPlayer = false;
 
             var hitOptions = HitOptions.IncludePhysX | HitOptions.IgnoreInputAuthority;
             if (Runner.LagCompensation.Raycast(CameraHandle.position, CameraHandle.forward, 200f,
@@ -753,10 +750,15 @@ namespace Starter.Shooter
                         if (targetPlayer != null)
                         {
                             PlayerKills++;
+                            _localHitPlayer = true;
                         }
-                        else
+                    }
+                    else
+                    {
+                        var targetPlayer = health.GetComponent<Player>();
+                        if (targetPlayer != null)
                         {
-                            ChickenKills += health.GetComponent<Chicken>() != null ? 1 : 0;
+                            _localHitPlayer = true;
                         }
                     }
                 }
@@ -770,8 +772,67 @@ namespace Starter.Shooter
         {
             if (_visibleFireCount < _fireCount)
             {
-                FireSound.PlayOneShot(FireSound.clip);
-                MuzzleParticle.Play();
+                if (HasInputAuthority && _localHitPlayer && HitPlayerAudioClip != null)
+                {
+                    FireSound.PlayOneShot(HitPlayerAudioClip);
+                }
+                else
+                {
+                    FireSound.PlayOneShot(FireSound.clip);
+                }
+                
+                if (MuzzleFlashPrefab != null)
+                {
+                    GameObject muzzleFlashInstance;
+                    
+                    if (MuzzleFlashFollowsWeapon && MuzzleFlashSpawnPoint != null)
+                    {
+                        muzzleFlashInstance = Instantiate(MuzzleFlashPrefab, MuzzleFlashSpawnPoint);
+                        muzzleFlashInstance.transform.localPosition = Vector3.zero;
+                        muzzleFlashInstance.transform.localRotation = Quaternion.Euler(MuzzleFlashRotationOffset);
+                    }
+                    else
+                    {
+                        Vector3 spawnPosition = MuzzleFlashSpawnPoint != null ? MuzzleFlashSpawnPoint.position : CameraHandle.position;
+                        Quaternion spawnRotation = MuzzleFlashSpawnPoint != null ? MuzzleFlashSpawnPoint.rotation : CameraHandle.rotation;
+                        
+                        spawnRotation *= Quaternion.Euler(MuzzleFlashRotationOffset);
+                        
+                        muzzleFlashInstance = Instantiate(MuzzleFlashPrefab, spawnPosition, spawnRotation);
+                    }
+                    
+                    ParticleSystem[] allParticles = muzzleFlashInstance.GetComponentsInChildren<ParticleSystem>();
+                    foreach (ParticleSystem ps in allParticles)
+                    {
+                        if (ps != null)
+                        {
+                            ps.Play();
+                        }
+                    }
+                    
+                    float maxDuration = 0f;
+                    foreach (ParticleSystem ps in allParticles)
+                    {
+                        if (ps != null)
+                        {
+                            float duration = ps.main.duration + ps.main.startLifetime.constantMax;
+                            if (duration > maxDuration)
+                            {
+                                maxDuration = duration;
+                            }
+                        }
+                    }
+                    
+                    if (MuzzleFlashFollowsWeapon && MuzzleFlashSpawnPoint != null)
+                    {
+                        StartCoroutine(DetachAndDestroyMuzzleFlash(muzzleFlashInstance, maxDuration));
+                    }
+                    else
+                    {
+                        Destroy(muzzleFlashInstance, maxDuration);
+                    }
+                }
+                
                 Animator.SetTrigger(_animIDShoot);
 
                 if (_hitPosition != Vector3.zero)
@@ -781,6 +842,17 @@ namespace Starter.Shooter
             }
 
             _visibleFireCount = _fireCount;
+        }
+
+        private System.Collections.IEnumerator DetachAndDestroyMuzzleFlash(GameObject muzzleFlash, float delay)
+        {
+            yield return new WaitForSeconds(Mathf.Max(0, delay - 0.1f));
+            
+            if (muzzleFlash != null)
+            {
+                muzzleFlash.transform.SetParent(null);
+                Destroy(muzzleFlash, 0.1f);
+            }
         }
 
         private void OnCurrentAmmoChangedCallback()
