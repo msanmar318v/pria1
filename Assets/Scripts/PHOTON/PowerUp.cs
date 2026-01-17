@@ -12,7 +12,9 @@ namespace Starter.Shooter
         [Header("Setup")]
         public float RespawnTime = 5f;
         [Header("Visual")]
-        [SerializeField] private MeshRenderer meshRenderer;   
+        [SerializeField] private MeshRenderer meshRenderer; 
+        [SerializeField] private Collider triggerCollider;  
+
         [Header("Respawn Points")]
         public Transform[] SpawnPoints;
         
@@ -43,10 +45,13 @@ namespace Starter.Shooter
                 if (SpawnPoints != null && SpawnPoints.Length > 0)
                 {
                     int index = Random.Range(0, SpawnPoints.Length);
-                    transform.position = SpawnPoints[index].position + Vector3.up * 0.5f;
+                    Transform spawnPoint = SpawnPoints[index];
+                    transform.position = spawnPoint.position + Vector3.up * 0.5f;
+                    transform.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);  // rotación random
                 }
                 
                 _isAvailable = true;
+                UpdateVisuals();
                 _respawnTimer = default;
             }
             
@@ -64,8 +69,6 @@ namespace Starter.Shooter
 
         private void OnTriggerEnter(Collider other)
         {
-            Debug.Log($"PowerUp OnTriggerEnter con: {other.name} en Runner: {Object.Runner}");
-
             // Si no está disponible
             if (_isAvailable == false)
             {
@@ -94,6 +97,8 @@ namespace Starter.Shooter
 
             // Para desactivar el gameObject del power up
             _isAvailable = false;
+            
+            UpdateVisuals();
             _respawnTimer = TickTimer.CreateFromSeconds(Runner, RespawnTime);
             
             Debug.Log($"Respawn: Expired={_respawnTimer.Expired(Runner)} Remaining={_respawnTimer.RemainingTime(Runner)}");
@@ -102,9 +107,10 @@ namespace Starter.Shooter
         private void UpdateVisuals()
         {
             if (meshRenderer != null)
-            {
                 meshRenderer.enabled = _isAvailable;
-            }
+        
+            if (triggerCollider != null)  
+                triggerCollider.enabled = _isAvailable;
         }
         
         
