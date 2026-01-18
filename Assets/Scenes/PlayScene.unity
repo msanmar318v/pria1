@@ -3164,7 +3164,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   GameModeIdentifier: Duel
   RunnerPrefab: {fileID: 2382109156329011261, guid: 7189b7c33d080ae4e8cf346d625c78f9, type: 3}
-  MaxPlayerCount: 3
+  MaxPlayerCount: 2
   ForceSinglePlayer: 0
   PanelGroup: {fileID: 964094991}
   RoomText: {fileID: 1762190466}
