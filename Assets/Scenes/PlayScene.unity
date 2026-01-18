@@ -1413,7 +1413,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   PlayerPrefab: {fileID: 1526919877228550752, guid: 945138385752ca14e9293579b2905fef, type: 3}
-  PowerUpPrefab: {fileID: 1884819327519935104, guid: ac904c2892f9c4c4cb187ee6bb0d0f2f, type: 3}
+  PowerUpPrefab: {fileID: 1359666379760524562, guid: 1121796d17c190746b09bf353d154415, type: 3}
   _BestHunterNickname: 
   _BestHunterKills: 0
   _IsGameOver:

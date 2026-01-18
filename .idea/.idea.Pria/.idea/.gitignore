@@ -1,0 +1,15 @@
+# Archivos ignorados por defecto
+/shelf/
+/workspace.xml
+# archivos ignorados Rider
+/contentModel.xml
+/.idea.Pria.iml
+/modules.xml
+/projectSettingsUpdater.xml
+# Carpeta predeterminada con archivos de consulta ignorada
+/queries/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+# Solicitud del cliente HTTP basado en el editor
+/httpRequests/

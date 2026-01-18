@@ -14,6 +14,13 @@ namespace Starter.Shooter
         [SerializeField] private MeshRenderer meshRenderer; 
         [SerializeField] private Collider triggerCollider;  
         
+        [Header("Rotation")]
+        [SerializeField] private float rotationSpeed = 90f; 
+        
+        [Header("Sound")]  
+        public AudioClip PowerUpSound;
+        
+        
         [Networked]
         private NetworkBool IsAvailable { get; set; }
         
@@ -26,6 +33,8 @@ namespace Starter.Shooter
         [Networked]
         private Quaternion NetworkedRotation { get; set; }
 
+        private GameObject _auraInstance;
+        
         public override void Spawned()
         {
             if (HasStateAuthority)
@@ -53,19 +62,34 @@ namespace Starter.Shooter
                 IsAvailable = true;
                 RespawnTimer = default;
             }
+            
+            // Rotación contínua mientras esté disponible
+            RotateVisual();
+
+            // Actualizar posición/rotación de red desde el host
+            if (HasStateAuthority)
+            {
+                NetworkedPosition = transform.position;
+                NetworkedRotation = transform.rotation;
+            }
+            
         }
         
         public override void Render()
         {
-            // Sincronizar la posici�n visual con la posici�n de red
+            // Sincronizar la posici�n visual con la posici�n de red
             transform.position = NetworkedPosition;
             transform.rotation = NetworkedRotation;
-            
+
+
             UpdateVisuals();
         }
 
         private void OnTriggerEnter(Collider other)
         {
+            
+            AudioSource.PlayClipAtPoint(PowerUpSound, transform.position);
+            
             // Solo el host procesa las colisiones
             if (!HasStateAuthority)
                 return;
@@ -107,5 +131,18 @@ namespace Starter.Shooter
             if (triggerCollider != null)  
                 triggerCollider.enabled = shouldBeVisible;
         }
+        
+        private void RotateVisual()
+        {
+            if (!IsAvailable)
+                return;
+
+            // girar alrededor del eje Y
+            float delta = rotationSpeed * Runner.DeltaTime;
+            transform.Rotate(0f, delta, 0f, Space.World);
+        }
+        
+        
+        
     }
 }
