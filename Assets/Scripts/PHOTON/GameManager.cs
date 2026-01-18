@@ -71,7 +71,15 @@ namespace Starter.Shooter
 				if (PowerUpPrefab != null)
 				{
 					Vector3 spawnPosition = GetPowerUpSpawnPosition();
-					_powerUpInstance = Runner.Spawn(PowerUpPrefab, spawnPosition, Quaternion.identity);
+					Quaternion spawnRotation = Quaternion.Euler(0, UnityEngine.Random.Range(0f, 360f), 0);
+					
+					_powerUpInstance = Runner.Spawn(PowerUpPrefab, spawnPosition, spawnRotation);
+					
+					// IMPORTANTE: Establecer la posición sincronizada inmediatamente después del spawn
+					if (_powerUpInstance != null)
+					{
+						_powerUpInstance.SetPosition(spawnPosition, spawnRotation);
+					}
 				}
 			}
 		}
@@ -268,15 +276,17 @@ namespace Starter.Shooter
 			return playerDataList;
 		}
 
-		// NUEVO: Método público para que el PowerUp solicite reposicionamiento
+		// Método público para que el PowerUp solicite reposicionamiento
 		public void RespawnPowerUp(PowerUp powerUp)
 		{
 			if (!HasStateAuthority || powerUp == null)
 				return;
 
 			Vector3 newPosition = GetPowerUpSpawnPosition();
-			powerUp.transform.position = newPosition;
-			powerUp.transform.rotation = Quaternion.Euler(0, UnityEngine.Random.Range(0f, 360f), 0);
+			Quaternion newRotation = Quaternion.Euler(0, UnityEngine.Random.Range(0f, 360f), 0);
+			
+			// Usar SetPosition para sincronizar correctamente
+			powerUp.SetPosition(newPosition, newRotation);
 		}
 
 		private Vector3 GetSpawnPosition()
@@ -291,7 +301,6 @@ namespace Starter.Shooter
 			return spawnPoint.transform.position + new Vector3(randomPositionOffset.x, 0f, randomPositionOffset.y);
 		}
 
-		// NUEVO: Método privado para obtener posición de spawn del PowerUp (igual que GetSpawnPosition)
 		private Vector3 GetPowerUpSpawnPosition()
 		{
 			if (_powerUpSpawnPoints == null || _powerUpSpawnPoints.Length == 0)

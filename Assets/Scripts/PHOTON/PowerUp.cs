@@ -19,6 +19,12 @@ namespace Starter.Shooter
         
         [Networked]
         private TickTimer RespawnTimer { get; set; }
+        
+        [Networked]
+        private Vector3 NetworkedPosition { get; set; }
+        
+        [Networked]
+        private Quaternion NetworkedRotation { get; set; }
 
         public override void Spawned()
         {
@@ -51,6 +57,10 @@ namespace Starter.Shooter
         
         public override void Render()
         {
+            // Sincronizar la posición visual con la posición de red
+            transform.position = NetworkedPosition;
+            transform.rotation = NetworkedRotation;
+            
             UpdateVisuals();
         }
 
@@ -74,6 +84,17 @@ namespace Starter.Shooter
             IsAvailable = false;
             UpdateVisuals();
             RespawnTimer = TickTimer.CreateFromSeconds(Runner, respawnTime);
+        }
+        
+        public void SetPosition(Vector3 position, Quaternion rotation)
+        {
+            if (!HasStateAuthority)
+                return;
+            
+            NetworkedPosition = position;
+            NetworkedRotation = rotation;
+            transform.position = position;
+            transform.rotation = rotation;
         }
         
         private void UpdateVisuals()
