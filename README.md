@@ -1,6 +1,6 @@
 # Duel Arena
 
-![Version](https://img.shields.io/badge/version-0.25-orange)
+![Version](https://img.shields.io/badge/version-1.0-orange)
 
 ---
 
@@ -14,11 +14,20 @@ El combate es rápido, directo y sin segundas oportunidades: reflejos, puntería
 
 ## Funcionalidades Principales de la Versión
 
-- **Menú interactivo en la escena PlayScene:**  
-  Interfaz funcional que permite al jugador iniciar la partida y acceder a la experiencia de juego de forma clara e intuitiva.
+- **Mapa de duelo creado:**  
+  Escenario diseñado específicamente para enfrentamientos directos entre jugadores.
 
-- **Spawn correcto del jugador (Shooter Prefab):**  
-  Los jugadores aparecen correctamente instanciados en la escena, listos para el combate multijugador.
+- **PowerUps:**  
+  Sistema de potenciadores que altera el desarrollo del combate y añade variedad a cada duelo.
+
+- **Sistemas reactivos en la interfaz:**  
+  La UI responde dinámicamente a las acciones del jugador y al estado de la partida.
+
+- **Animaciones detalladas de los personajes:**  
+  Movimientos y acciones pulidas para mejorar la sensación de fluidez y realismo.
+
+- **Sistema de rondas y revanchas:**  
+  Permite encadenar enfrentamientos, llevar el control del ganador y repetir duelos.
 
 ---
 
@@ -31,16 +40,16 @@ El combate es rápido, directo y sin segundas oportunidades: reflejos, puntería
   - C#
 
 - **Multijugador:**  
-  - Photon
+  - Photon  
   - Photon Fusion
 
 ---
 
 ## Estado del Proyecto
 
-El proyecto se encuentra actualmente en la **versión 0.25**, en una fase temprana de desarrollo donde se están sentando las bases del gameplay, la arquitectura multijugador y la experiencia de usuario.
+El proyecto se encuentra actualmente en la **versión 1.0**, correspondiente a la **primera entrega jugable** de *Duel Arena*.  
+Aunque esta versión ya es completamente funcional, el objetivo es **seguir ampliando el proyecto**, incorporando en el futuro **sistemas de inteligencia artificial**, nuevos modos de juego y otras mejoras tanto a nivel técnico como jugable.
 
 ---
 
 *Dos pistolas, una arena… solo uno saldrá con vida.*
-
