@@ -22,6 +22,9 @@ namespace Starter.Shooter
 		}
 
 		public Player PlayerPrefab;
+		
+		[Header("PowerUp Setup")]
+		public PowerUp PowerUpPrefab;
 
 		[Networked]
 		public PlayerRef BestHunter { get; set; }
@@ -48,11 +51,14 @@ namespace Starter.Shooter
 
 		private List<Player> _players = new(32);
 		private SpawnPoint[] _spawnPoints;
+		private PowerUpSpawnPoint[] _powerUpSpawnPoints;
+		private PowerUp _powerUpInstance;
 		private const int KILLS_TO_WIN = 10;
 
 		public override void Spawned()
 		{
 			_spawnPoints = FindObjectsByType<SpawnPoint>(FindObjectsSortMode.None);
+			_powerUpSpawnPoints = FindObjectsByType<PowerUpSpawnPoint>(FindObjectsSortMode.None);
 			
 			if (HasStateAuthority)
 			{
@@ -60,6 +66,13 @@ namespace Starter.Shooter
 				BestHunterKills = 0;
 				IsGameOver = false;
 				PlayerCount = 0;
+				
+				// Spawnear el PowerUp si el prefab está asignado
+				if (PowerUpPrefab != null)
+				{
+					Vector3 spawnPosition = GetPowerUpSpawnPosition();
+					_powerUpInstance = Runner.Spawn(PowerUpPrefab, spawnPosition, Quaternion.identity);
+				}
 			}
 		}
 
@@ -255,6 +268,17 @@ namespace Starter.Shooter
 			return playerDataList;
 		}
 
+		// NUEVO: Método público para que el PowerUp solicite reposicionamiento
+		public void RespawnPowerUp(PowerUp powerUp)
+		{
+			if (!HasStateAuthority || powerUp == null)
+				return;
+
+			Vector3 newPosition = GetPowerUpSpawnPosition();
+			powerUp.transform.position = newPosition;
+			powerUp.transform.rotation = Quaternion.Euler(0, UnityEngine.Random.Range(0f, 360f), 0);
+		}
+
 		private Vector3 GetSpawnPosition()
 		{
 			if (_spawnPoints == null || _spawnPoints.Length == 0)
@@ -265,6 +289,18 @@ namespace Starter.Shooter
 			var spawnPoint = _spawnPoints[UnityEngine.Random.Range(0, _spawnPoints.Length)];
 			var randomPositionOffset = UnityEngine.Random.insideUnitCircle * spawnPoint.Radius;
 			return spawnPoint.transform.position + new Vector3(randomPositionOffset.x, 0f, randomPositionOffset.y);
+		}
+
+		// NUEVO: Método privado para obtener posición de spawn del PowerUp (igual que GetSpawnPosition)
+		private Vector3 GetPowerUpSpawnPosition()
+		{
+			if (_powerUpSpawnPoints == null || _powerUpSpawnPoints.Length == 0)
+			{
+				return new Vector3(0f, 0.5f, 0f);
+			}
+
+			var spawnPoint = _powerUpSpawnPoints[UnityEngine.Random.Range(0, _powerUpSpawnPoints.Length)];
+			return spawnPoint.transform.position + Vector3.up * 0.5f;
 		}
 	}
 }

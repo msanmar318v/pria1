@@ -171,9 +171,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speedMultiplier: 1.5
   duration: 5
-  RespawnTime: 5
+  respawnTime: 5
   meshRenderer: {fileID: 6498773736853704666}
-  SpawnPoints:
-  - {fileID: 0}
-  - {fileID: 0}
+  triggerCollider: {fileID: 1942692772110153817}
+  spawnPoints:
   - {fileID: 0}
