@@ -76,13 +76,6 @@ namespace Starter.Shooter
                 return;
             }
 
-            // Solo autoridad
-            if (HasStateAuthority == false)
-            {
-                Debug.Log("No tiene StateAuthority");
-                return;
-            }
-
             // Buscar Player
             var player = other.GetComponentInParent<Player>();
             if (player == null)
